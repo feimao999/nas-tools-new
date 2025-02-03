@@ -1,16 +1,8 @@
-import json
-
-import openai
-
-from app.utils import OpenAISessionCache
-from app.utils.commons import singleton
-from config import Config
-
-
 @singleton
 class OpenAiHelper:
     _api_key = None
     _api_url = None
+    _model = None
 
     def __init__(self):
         self.init_config()
@@ -26,6 +18,7 @@ class OpenAiHelper:
             proxy_conf = Config().get_proxies()
             if proxy_conf and proxy_conf.get("https"):
                 openai.proxy = proxy_conf.get("https")
+        self._model = Config().get_config("openai").get("model", "gpt-3.5-turbo")
 
     def get_state(self):
         return True if self._api_key else False
@@ -72,11 +65,7 @@ class OpenAiHelper:
             OpenAISessionCache.set(session_id, seasion)
         return seasion
 
-    @staticmethod
-    def __get_model(message,
-                    prompt=None,
-                    user="NAStool",
-                    **kwargs):
+    def __get_model(self, message, prompt=None, user="NAStool", **kwargs):
         """
         获取模型
         """
@@ -100,7 +89,7 @@ class OpenAiHelper:
                     }
                 ]
         return openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model=self._model,
             user=user,
             messages=message,
             **kwargs
@@ -202,7 +191,7 @@ class OpenAiHelper:
             return None
         result = ""
         try:
-            _question_prompt = "下面我们来玩一个游戏，你是老师，我是学生，你需要回答我的问题，我会给你一个题目和几个选项，你的回复必须是给定选项中正确答案对应的序号，请直接回复数字"
+            _question_prompt = "下面我们来玩一个游戏，你是老师，我是学生，你需要回答我的问题，我会给你一个题目和几个选项，你的回复必须是给定的答案。"
             completion = self.__get_model(prompt=_question_prompt, message=question)
             result = completion.choices[0].message.content
             return result
