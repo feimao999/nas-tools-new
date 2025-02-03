@@ -170,6 +170,8 @@ openai:
   api_key:
   # 【openai api url】：自定义openai请求地址
   api_url:
+  # 【openai model】：自定义openai模型
+  model: gpt-3.5-turbo
 
 # 【OCR】
 ocr:
