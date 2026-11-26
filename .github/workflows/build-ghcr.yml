@@ -101,9 +101,9 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -n "$PREV_TAG" ]; then
-            CHANGES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+            CHANGES=$(git log "${PREV_TAG}..HEAD" --pretty=format:"### %s (%h)%n%b" --no-merges)
           else
-            CHANGES=$(git log -n 5 --pretty=format:"- %s (%h)" --no-merges)
+            CHANGES=$(git log -n 5 --pretty=format:"### %s (%h)%n%b" --no-merges)
           fi
           if [ -z "$CHANGES" ]; then
             CHANGES="- 重新构建并发布镜像 (${SHORT_SHA})"

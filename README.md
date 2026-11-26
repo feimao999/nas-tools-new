@@ -1,158 +1,96 @@
-# NAS媒体库管理工具
+# NAS媒体库管理工具（个人自用精简定制版）
 
-[![GitHub stars](https://img.shields.io/github/stars/hsuyelin/nas-tools?style=plastic)](https://github.com/hsuyelin/nas-tools/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/hsuyelin/nas-tools?style=plastic)](https://github.com/hsuyelin/nas-tools/network/members)
-[![GitHub issues](https://img.shields.io/github/issues/hsuyelin/nas-tools?style=plastic)](https://github.com/hsuyelin/nas-tools/issues)
-[![GitHub license](https://img.shields.io/github/license/hsuyelin/nas-tools?style=plastic)](https://github.com/hsuyelin/nas-tools/blob/master/LICENSE.md)
-[![Docker pulls](https://img.shields.io/docker/pulls/hsuyelin/nas-tools?style=plastic)](https://hub.docker.com/r/hsuyelin/nas-tools)
-[![Platform](https://img.shields.io/badge/platform-amd64/arm64-pink?style=plastic)](https://hub.docker.com/r/hsuyelin/nas-tools)
+[![GitHub release](https://img.shields.io/github/v/release/feimao999/nas-tools-new?style=plastic)](https://github.com/feimao999/nas-tools-new/releases)
+[![GitHub stars](https://img.shields.io/github/stars/feimao999/nas-tools-new?style=plastic)](https://github.com/feimao999/nas-tools-new/stargazers)
+[![GitHub license](https://img.shields.io/github/license/feimao999/nas-tools-new?style=plastic)](https://github.com/feimao999/nas-tools-new/blob/master/LICENSE.md)
+[![Platform](https://img.shields.io/badge/platform-amd64%2Farm64-blue?style=plastic)](https://github.com/feimao999/nas-tools-new/pkgs/container/nas-tools-new)
 
 ## 维护声明
 
-1）本维护项目为[nas-tools](https://github.com/NAStool/nas-tools)维护项目非官方项目；  
-2）本维护项目旨在帮助喜欢PT的小伙伴更加易用，本人未创建任何交流群或频道；  
-3）本维护项目提交的修复和需求皆为开源，任何维护该项目的小伙伴皆可参考，但尽量注明出处；  
-4）使用本维护项目请尽量保持低调，尽可能不在交流群或者频道传播，自己使用即可；  
-5）欢迎任何形式的pr，请尽量将pr内容描述清楚；  
+1. **个人自用声明**：本仓库仅为**个人自用**而维护的定制精简版本，不建任何交流群或频道，也不承诺对外提供技术支持与长期兼容维护。
+2. **AI 编写声明**：本仓库在原项目基础上所做的**全部新增功能、重构与体积精简改动，均 100% 由 AI 编写完成**。
+3. **项目来源与致谢**：本项目直接 Fork 并修改自 [c77187326/nas-tools](https://github.com/c77187326/nas-tools)（上游源自 [hsuyelin/nas-tools](https://github.com/hsuyelin/nas-tools) 及官方原版 [NAStool/nas-tools](https://github.com/NAStool/nas-tools)），特此感谢原作者与历任开源维护者的付出。
+4. **开源与低调使用**：所有修改代码均保持开源供参考；请自行低调使用，勿在公共交流群或频道大肆传播。
 
-## 开发路线及官方原版新增内容
+---
 
-基于官方 3.2.3 版本
+## 本仓库定制与精简说明（v4.0+）
 
-[开发路线](https://github.com/hsuyelin/nas-tools/discussions/91)
+围绕「**资源搜索 + 追更/RSS 订阅 + 下载管理 + AI 智能识别整理**」核心场景进行了重构与大幅瘦身：
 
-- [x] 支持Aria2/115/PikPak下载器
-- [x] 支持chromedriver114版本以上的谷歌浏览器
-- [x] 支持识别历史记录一键清理
-- [x] 支持通过插件安装Jackett和Prowlarr扩展内置索引
-- [x] 支持TMDB搜索18+内容
-- [x] 支持通过开关控制刮削时是否刮削视频实际媒体信息
-- [x] 支持管理我的媒体库显示模块
-- [x] 修复官方版豆瓣图片无法显示
-- [x] 修复官方原版豆瓣同步方式近期动态与全量同步失效
-- [x] 修复官方原版高清空间签到cookies错误
-- [x] 持续更新索引站点
-- [x] 更多功能请查阅 [版本发布](https://github.com/hsuyelin/nas-tools/releases)  更新日志 
+### 1. 多模型联网 AI 识别增强
+- [x] 支持 **OpenAI**、**Anthropic Claude**、**Google Gemini** 及 **本地/第三方兼容接口（Ollama、LM Studio、DeepSeek、One-API 等）** 原生直连，支持一键拉取模型列表。
+- [x] 支持 **优先使用 AI 识别**（遇到额度耗尽或网络异常自动回退常规 TMDB 识别，不中断整理流程）。
+- [x] 支持 **AI 联网搜索辅助识别**，解决新剧场版、冷门番剧、罗马音/副标题命名识别不准问题。
+- [x] 支持两阶段 TMDB 候选精准选片、多季不同标题动画季号缓存，以及 `OVA` / `OAD` / `SP` 特典自动归入 `Season 0 (S00)`。
+
+### 2. 镜像体积与运行占用大精简（镜像体积缩减约 66%）
+- [x] **移除重型底层组件**：移除内置无头浏览器 `Chromium`、`Xvfb`、`Selenium`、`ffmpeg`、`MinIO mc` 及 20+ 个冗余 Python 包（保留 `rclone` 与 `Redis + feapder` 搜索支持）。
+- [x] **精简无关界面与后台任务**：移除 `探索`、`站点管理`（站点维护/数据统计/刷流任务/站点资源）、顶部探索搜索栏、基础设置 `OCR` 卡片及对应后台定时任务。
+- [x] **清理无用插件**：移除 `站点自动签到`、`AI字幕自动生成`、`IYUU自动辅种`、`CookieCloud同步`、`自动转移做种`、`种子标记`、`OpenSubtitles` 插件。
+- [x] 详细每次变更说明请查阅 [GitHub Releases](https://github.com/feimao999/nas-tools-new/releases)。
+
+---
 
 ## 安装
-### 1、Docker
-```
-docker pull hsuyelin/nas-tools:latest
-```
-教程见 [这里](https://raw.githubusercontent.com/hsuyelin/nas-tools/master/docker/readme.md) 。
 
-如无法连接Github，注意不要开启自动更新开关(NASTOOL_AUTO_UPDATE=false)，将NASTOOL_CN_UPDATE设置为true可使用国内源加速安装依赖。
-
-### 2、本地运行
-仅支持python3.10版本，需要预安装cython（python3 -m pip install Cython），如发现缺少依赖包需额外安装：
-```
-git clone -b master https://github.com/hsuyelin/nas-tools --recurse-submodule 
-python3 -m pip install --force-reinstall -r requirements.txt
-export NASTOOL_CONFIG="/xxx/config/config.yaml"
-nohup python3 run.py & 
-```
-
-### 3、可执行文件运行
-仅支持python3.10版本，先从tag下载对应的可执行文件，打开终端，例如下载的是macos版本，文件名为：nastool_macos_v3.2.2：
+### 1、Docker（推荐，支持 `linux/amd64` 与 `linux/arm64`）
 ```bash
-mv nastool_macos_v3.2.2 nastools
-chmod +x nastools
-// macos 12以上需要去隐私-安全性，允许任意开发者
-./nastools（如果需要不在终端输出执行：./nastool &> /dev/null）
+docker pull ghcr.io/feimao999/nas-tools-new:latest
+```
+也可指定具体版本号拉取（详见 [Releases](https://github.com/feimao999/nas-tools-new/releases)）：
+```bash
+docker pull ghcr.io/feimao999/nas-tools-new:v4.0.0
+```
+Docker Compose 示例可参考仓库内 [`docker/compose.yml`](docker/compose.yml)。
+
+### 2、本地源码运行
+需要 Python 3.10 环境并预装 `Cython`（`python3 -m pip install Cython`）：
+```bash
+git clone -b master https://github.com/feimao999/nas-tools-new.git --recurse-submodule
+cd nas-tools-new
+python3 -m pip install -r requirements.txt
+export NASTOOL_CONFIG="/xxx/config/config.yaml"
+nohup python3 run.py &
 ```
 
-## 官方免责
+---
 
-1）本软件仅供学习交流使用，对用户的行为及内容毫不知情，使用本软件产生的任何责任需由使用者本人承担。  
-2）本软件代码开源，基于开源代码进行修改，人为去除相关限制导致软件被分发、传播并造成责任事件的，需由代码修改发布者承担全部责任，不建议对用户认证机制进行规避或修改并公开发布。  
-3）本项目没有在任何地方发布捐赠信息页面，也不会接受捐赠或收费，请仔细辨别避免误导。
+## 免责声明
 
+1. 本软件仅供个人学习交流使用，对使用者的行为及内容概不知情，使用本软件产生的任何责任均由使用者本人自行承担。
+2. 本项目没有任何捐赠渠道，也绝不会接受捐赠或收费，请注意甄别。
+
+---
 
 ## 常见问题
 
-### 1. 启动inotify报错/无法自动目录同步
+### 1. 启动 inotify 报错 / 无法自动目录同步
+> 日志报 `inotify instance limit reached`、`inotify watch limit reached` 等错误，或目录同步无法自动触发。
 
-> 问题描述
-> 无法启动，日志报inotify instance limit reached、inotify watch limit reached等与inotify相关错误
-> 目录同步无法自动同步或只有部份目录正常，但在服务中手动启动可以正常同步
-
-解决办法：
-* 宿主机上（不是docker容器里），执行以下命令：
- ```bash
+解决办法（在宿主机而非容器内执行）：
+```bash
 echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
 echo fs.inotify.max_user_instances=524288 | sudo tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
-* 插件-定时目录同步
+或者启用内置插件「定时目录同步」。
 
-### 2. 启动报错数据库no such column
-> 问题描述
-> 启动报错数据库no such column
+### 2. 启动报错数据库 `no such column`
+使用 [SQLite 浏览器](https://github.com/sqlitebrowser/sqlitebrowser) 打开 `config` 目录下的 `user.db`，删除 `alembic_version` 表后重启容器。
 
-解决办法：
-* [Sqlite浏览器](https://github.com/sqlitebrowser/sqlitebrowser)打开config文件夹下user.db
-* 删除alembic_version表后重启
+### 3. 消息通知内容点击无法跳转
+在「系统设置 -> 基础设置 -> 系统 -> 外网访问地址」中填写访问地址。
 
-### 3. Nginx-Proxy-Manager无法申请/更新Let's Encrypt证书
-> 问题描述
-> Nginx-Proxy-Manager无法申请/更新Let's Encrypt证书
+### 4. 电影/电视剧订阅一直处于队列中
+- 如启用了订阅站点，请在「系统设置 -> 基础设置 -> 服务 -> 订阅RSS周期」中设置周期；
+- 如启用了搜索站点，请在「订阅搜索周期」中设置周期，或手动点击订阅卡片刷新。
 
-解决办法：
-* 无法通过DNSpod申请, 进入容器，执行命令
-```bash
-pip install certbot-dns-dnspod
-```
+### 5. 目录同步文件重复转移
+目录同步设置时，**目的目录不要放在源目录内部**。
 
-* 无法更新/自动更新
-```bash
-进入容器，执行命令 pip install zope
-```
+### 6. 识别转移错误码 `-1`
+硬链接不支持跨文件系统/跨盘（群晖中不同共享文件夹会被视为跨卷），请确保源目录与目标媒体库挂载在同一个父级挂载路径下。
 
-* pip使用代理
-```
-pip install xxx --proxy=http://ip:port
-```
-
-### 4. 消息通知内容无法跳转
-> 问题描述
-> 消息通知内容无法跳转
-
-解决办法：
-* 设置-基础设置-系统-外网访问地址
-
-### 5. 电影/电视剧订阅一直队列中
-> 问题描述
-> 电影/电视剧订阅添加后，一直在队列中
-> 需手动刷新订阅开始搜索或订阅
-
-解决办法：
-* 订阅如启用有订阅站点, 请在设置-基础设置-服务-订阅RSS周期设置启用
-* 订阅如启用有搜索站点, 请在设置-基础设置-服务-订阅搜索周期设置启用
-* 添加后点击订阅，选择刷新
-
-### 6. 目录同步文件重复转移
-> 问题描述
-> 设置-基础设置-媒体-重命名格式中包含{releaseGroup}
-> 文件转移方式为目录同步
-> 转移后，出现重复的转移文件（制作组等后缀不同）
-
-解决办法：
-* 目录同步设置时，目的目录不要在源目录下
-
-### 7. 识别转移错误码-1
-> 问题描述
-> 识别转移错误码-1
-
-解决办法：
-* 硬链接跨盘，转移前后目录根目录需相同
-* 群晖中，不同的共享文件夹会被系统认为是跨盘
-
-### 8. 电视剧订阅在完结前自动删除
-> 问题描述
-> 电视剧订阅在完结前自动删除
-
-解决办法：
-*  TMDB词条未更新集数/下载资源无法识别集数
-*  订阅中设置总集数
-
-更多功能使用请查看 [nas-tools wiki](https://t.me/NAStool_wiki)
+### 7. 电视剧订阅在完结前自动删除
+TMDB 词条尚未更新总集数时，可在订阅编辑中手动指定总集数。
