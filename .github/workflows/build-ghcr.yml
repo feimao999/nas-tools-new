@@ -1,9 +1,16 @@
 name: Build GHCR Image
 on:
   workflow_dispatch:
+    inputs:
+      custom_tag:
+        description: '可选自定义版本号标签（例如 v1.2.0，留空则仅使用自动递增版本号）'
+        required: false
+        default: ''
   push:
     branches:
       - master
+    tags:
+      - 'v*'
     paths-ignore:
       - '**.md'
       - 'tests/**'
@@ -27,7 +34,9 @@ jobs:
       - name: Release version
         run: |
           app_version=$(cat version.py | sed -ne "s/APP_VERSION\s=\s'v\(.*\)'/\1/gp")
+          build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
           echo "app_version=${app_version}" >> $GITHUB_ENV
+          echo "build_date=${build_date}" >> $GITHUB_ENV
 
       - name: Docker metadata
         id: meta
@@ -36,7 +45,10 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ env.app_version }}
+            type=raw,value=v${{ env.app_version }}.${{ github.run_number }}
+            type=raw,value=${{ env.build_date }}-b${{ github.run_number }}
+            type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
+            type=ref,event=tag
             type=sha,format=short
 
       - name: Set up QEMU
