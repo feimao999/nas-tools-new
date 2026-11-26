@@ -10,12 +10,13 @@ RUN apk add --no-cache --virtual .build-deps \
     && if [ "$(uname -m)" = "x86_64" ]; then ARCH=amd64; elif [ "$(uname -m)" = "aarch64" ]; then ARCH=arm64; fi \
     && curl https://dl.min.io/client/mc/release/linux-${ARCH}/mc --create-dirs -o /usr/bin/mc \
     && chmod +x /usr/bin/mc \
-    && echo "setuptools==68.2.2" > /tmp/pip-constraints.txt \
+    && echo "pip==23.3.2" > /tmp/pip-constraints.txt \
+    && echo "setuptools==68.2.2" >> /tmp/pip-constraints.txt \
     && echo "wheel==0.41.2" >> /tmp/pip-constraints.txt \
+    && echo "cython==0.29.36" >> /tmp/pip-constraints.txt \
     && export PIP_CONSTRAINT=/tmp/pip-constraints.txt \
-    && pip install --upgrade pip setuptools wheel \
-    && pip install cython \
-    && pip install -r https://raw.githubusercontent.com/feimao999/nas-tools-new/master/requirements.txt \
+    && pip install --upgrade "pip==23.3.2" "setuptools==68.2.2" "wheel==0.41.2" "cython==0.29.36" \
+    && pip install --no-build-isolation -r https://raw.githubusercontent.com/feimao999/nas-tools-new/master/requirements.txt \
     && apk del --purge .build-deps \
     && rm -rf /tmp/* /root/.cache /var/cache/apk/*
 ENV S6_SERVICES_GRACETIME=30000 \
