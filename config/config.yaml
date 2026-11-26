@@ -164,14 +164,16 @@ pt:
   # 【强制开启刷流】：一般情况需要新人在考核期摸索完PT规则才可以开启刷流，开启后将会允许无视该规则强制刷流
   force_enable_brush: false
 
-# 【openai】
+# 【AI 配置（支持 OpenAI / Claude / Gemini / 本地或兼容接口）】
 openai:
-  # 【openai api key】：openai的api key，可在openai官网申请
+  # 【AI 服务商】：openai（OpenAI / 兼容接口）、claude（Anthropic Claude）、gemini（Google Gemini）、local（Ollama / LM Studio / DeepSeek / One-API 等，本地 AI 可不填 Key）
+  provider: openai
+  # 【API Key】：OpenAI / Claude / Gemini / 第三方兼容接口的 API Key；本地 AI 可留空
   api_key:
-  # 【openai api url】：自定义openai请求地址
+  # 【API URL】：默认地址分别为 OpenAI: https://api.openai.com、Claude: https://api.anthropic.com、Gemini: https://generativelanguage.googleapis.com、本地 Ollama: http://127.0.0.1:11434/v1；使用官方地址留空即可
   api_url:
-  # 【openai model】：自定义openai模型
-  model: gpt-3.5-turbo
+  # 【模型名称】：自定义模型，例如 gpt-4o-mini / claude-sonnet-4-5 / gemini-2.5-flash / qwen2.5:7b（可在 Web 设置页自动识别选择）
+  model: gpt-4o-mini
 
 # 【OCR】
 ocr:
@@ -207,7 +209,7 @@ laboratory:
   search_keyword: false
   # 【WEB识别增强】：通过TMDB WEB检索
   search_tmdbweb: true
-  # 【ChatGPT识别增强】通过ChatGPT识别文件名
+  # 【AI识别增强】通过 AI（OpenAI / Claude / Gemini / 本地 AI）识别文件名
   chatgpt_enable: false
   # 【增强识别V2】：开启后会使用增强识别V2识别，优先级最高，关闭后将使用原版的识别方式识别
   recognize_enhance_enable: true

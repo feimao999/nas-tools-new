@@ -464,16 +464,16 @@ class Media:
 
         if not file_name:
             return __failed_none()
-        log.info("【Meta】正在通过ChatGPT识别文件名：%s" % file_name)
+        log.info("【Meta】正在通过AI识别文件名：%s" % file_name)
         file_info = self.openai.get_media_name(file_name)
         if file_info is None:
-            log.info("【Meta】ChatGPT识别出错，请检查是否设置OpenAI ApiKey！")
+            log.info("【Meta】AI识别出错，请检查AI服务配置（服务商、API Key或API Url）！")
             return __failed_none()
         if not file_info:
-            log.info("【Meta】ChatGPT识别失败！")
+            log.info("【Meta】AI识别失败！")
             return __failed()
         else:
-            log.info("【Meta】ChatGPT识别结果：%s" % file_info)
+            log.info("【Meta】AI识别结果：%s" % file_info)
             if file_info.get("season") or file_info.get("episode"):
                 mtype = MediaType.TV
             # 处理标题和年份

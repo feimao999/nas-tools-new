@@ -83,6 +83,7 @@ class WebAction:
             "reset_db_version": self.__reset_db_version,
             "logout": self.__logout,
             "update_config": self.__update_config,
+            "get_ai_models": self.__get_ai_models,
             "update_directory": self.__update_directory,
             "add_or_edit_sync_path": self.__add_or_edit_sync_path,
             "get_sync_path": self.get_sync_path,
@@ -1294,6 +1295,26 @@ class WebAction:
             Config().save_config(cfg)
 
         return {"code": 0}
+
+    @staticmethod
+    def __get_ai_models(data):
+        """
+        获取AI服务商可用模型列表
+        """
+        from app.helper.openai_helper import OpenAiHelper
+        provider = (data.get("provider") or "openai").strip().lower()
+        api_key = (data.get("api_key") or "").strip()
+        api_url = (data.get("api_url") or "").strip()
+        if provider in ("openai", "claude", "gemini") and not api_key and not (provider == "openai" and api_url):
+            return {"code": 1, "msg": "请先填写 API Key"}
+        if provider == "local" and not api_url:
+            return {"code": 1, "msg": "请先填写本地 AI 的 API Url"}
+        try:
+            models = OpenAiHelper().list_models(provider=provider, api_key=api_key, api_url=api_url)
+            return {"code": 0, "models": models}
+        except Exception as e:
+            ExceptionUtils.exception_traceback(e)
+            return {"code": 1, "msg": f"获取模型列表失败：{str(e)}"}
 
     @staticmethod
     def __add_or_edit_sync_path(data):
