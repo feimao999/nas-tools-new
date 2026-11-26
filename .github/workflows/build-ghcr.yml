@@ -75,6 +75,7 @@ jobs:
           push: true
           build-args: |
             BUILD_COMMIT=${{ github.sha }}
+            BUILD_VERSION=v${{ env.app_version }}.${{ github.run_number }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

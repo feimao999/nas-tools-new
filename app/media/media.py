@@ -463,6 +463,19 @@ class Media:
         return ai_enable, ai_priority
 
     @staticmethod
+    def _is_special_name(name):
+        """
+        判断名称或文件名中是否包含 SP / OVA / OAD / 特典 等特典标识（避免污染正片季级缓存）
+        """
+        return bool(
+            re.search(
+                r'(?:^|[\s._\-\[\(【（])(OVA\d*|OAD\d*|SP\d*|SPECIALS?|特典|番外)(?:$|[\s._\-\]\)】）])',
+                name or '',
+                re.IGNORECASE,
+            )
+        )
+
+    @staticmethod
     def _apply_ai_meta(meta_info, ai_mtype, ai_season, ai_episode, override=False, lock_mtype=False):
         """
         将 AI 识别出的类型、季、集写回 MetaInfo
@@ -942,12 +955,15 @@ class Media:
 
         # 开启「优先使用 AI 识别」时：先尝试 AI 专用缓存及 AI 识别，失败则自动回退到常规 TMDB 识别
         if ai_priority:
-            ai_cache_key = f"[AI]{media_key}" if media_key else None
+            is_special = self._is_special_name(title)
+            ai_cache_key = f"[AI]{media_key}" if (media_key and not is_special) else None
             if cache and ai_cache_key and self.meta.get_meta_data_by_key(ai_cache_key):
                 cache_info = self.meta.get_meta_data_by_key(ai_cache_key)
                 if cache_info.get("id"):
                     if cache_info.get("type") and not mtype:
                         meta_info.type = cache_info.get("type")
+                    if cache_info.get("ai_season") is not None:
+                        meta_info.set_season(cache_info.get("ai_season"))
                     file_media_info = self.get_tmdb_info(mtype=cache_info.get("type"),
                                                          tmdbid=cache_info.get("id"),
                                                          chinese=chinese,
@@ -970,7 +986,8 @@ class Media:
                                                              append_to_response=append_to_response)
                     if file_media_info and ai_cache_key:
                         self.__insert_media_cache(media_key=ai_cache_key,
-                                                  file_media_info=file_media_info)
+                                                  file_media_info=file_media_info,
+                                                  ai_season=seaons)
                     used_ai_priority = True
                 else:
                     log.info("【Meta】AI优先识别未获取到结果，自动回退到常规TMDB识别：%s" % title)
@@ -1066,7 +1083,7 @@ class Media:
         meta_info.set_tmdb_info(file_media_info)
         return meta_info
 
-    def __insert_media_cache(self, media_key, file_media_info):
+    def __insert_media_cache(self, media_key, file_media_info, ai_season=None):
         """
         将TMDB信息插入缓存
         """
@@ -1080,16 +1097,17 @@ class Media:
                 "media_type") == MediaType.MOVIE else file_media_info.get('first_air_date')
             if cache_year:
                 cache_year = cache_year[:4]
-            self.meta.update_meta_data({
-                media_key: {
-                    "id": file_media_info.get("id"),
-                    "type": file_media_info.get("media_type"),
-                    "year": cache_year,
-                    "title": cache_title,
-                    "poster_path": file_media_info.get("poster_path"),
-                    "backdrop_path": file_media_info.get("backdrop_path")
-                }
-            })
+            cache_item = {
+                "id": file_media_info.get("id"),
+                "type": file_media_info.get("media_type"),
+                "year": cache_year,
+                "title": cache_title,
+                "poster_path": file_media_info.get("poster_path"),
+                "backdrop_path": file_media_info.get("backdrop_path")
+            }
+            if ai_season is not None:
+                cache_item["ai_season"] = ai_season
+            self.meta.update_meta_data({media_key: cache_item})
         else:
             self.meta.update_meta_data({media_key: {'id': 0}})
 
@@ -1179,9 +1197,10 @@ class Media:
                     has_reg_name = bool(meta_info.get_name())
                     media_key = self.__make_cache_key(meta_info) if has_reg_name else None
 
-                    # 开启「优先使用 AI 识别」时：先走 AI 识别（同一剧集季若已提取到集号则复用 [AI] 缓存以节省配额），失败回退常规 TMDB
+                    # 开启「优先使用 AI 识别」时：先走 AI 识别（同一剧集季若已提取到集号且非特典则复用 [AI] 缓存以节省配额），失败回退常规 TMDB
                     if ai_priority:
-                        can_reuse_ai_cache = has_reg_name and (
+                        is_special = self._is_special_name(file_name)
+                        can_reuse_ai_cache = has_reg_name and not is_special and (
                             meta_info.type == MediaType.MOVIE or meta_info.begin_episode is not None
                         )
                         ai_cache_key = f"[AI]{media_key}" if can_reuse_ai_cache else None
@@ -1190,6 +1209,8 @@ class Media:
                             if cache_info.get("id"):
                                 if cache_info.get("type") and not media_type:
                                     meta_info.type = cache_info.get("type")
+                                if cache_info.get("ai_season") is not None:
+                                    meta_info.set_season(cache_info.get("ai_season"))
                                 file_media_info = self.get_tmdb_info(mtype=cache_info.get("type"),
                                                                      tmdbid=cache_info.get("id"),
                                                                      chinese=chinese,
@@ -1213,7 +1234,8 @@ class Media:
                                                                          append_to_response=append_to_response)
                                 if file_media_info and ai_cache_key:
                                     self.__insert_media_cache(media_key=ai_cache_key,
-                                                              file_media_info=file_media_info)
+                                                              file_media_info=file_media_info,
+                                                              ai_season=seaons)
                                 used_ai_priority = True
                             else:
                                 log.info("【Meta】AI优先识别未获取到结果，自动回退到常规TMDB识别：%s" % file_name)

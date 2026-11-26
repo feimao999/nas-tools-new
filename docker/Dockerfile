@@ -43,7 +43,9 @@ ENV S6_SERVICES_GRACETIME=30000 \
     WORKDIR="/nas-tools"
 WORKDIR ${WORKDIR}
 ARG BUILD_COMMIT=unknown
-RUN echo "Building nas-tools-new commit ${BUILD_COMMIT}"
+ARG BUILD_VERSION=""
+ENV NASTOOL_IMAGE_VERSION=${BUILD_VERSION}
+RUN echo "Building nas-tools-new commit ${BUILD_COMMIT} (${BUILD_VERSION})"
 RUN mkdir ${HOME} \
     && addgroup -S nt -g 911 \
     && adduser -S nt -G nt -h ${HOME} -s /bin/bash -u 911 \

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 
 import cn2an
@@ -41,10 +42,11 @@ class WebUtils:
         """
         获取当前版本号
         """
-        commit_id = SystemUtils.execute('git rev-parse HEAD')
+        ver = (os.environ.get("NASTOOL_IMAGE_VERSION") or "").strip() or APP_VERSION
+        commit_id = (SystemUtils.execute('git rev-parse HEAD') or "").strip()
         if commit_id and len(commit_id) > 7:
             commit_id = commit_id[:7]
-        return "%s %s" % (APP_VERSION, commit_id)
+        return f"{ver} {commit_id}".strip()
 
     @staticmethod
     def get_latest_version():
@@ -54,9 +56,9 @@ class WebUtils:
         try:
             releases_update_only = Config().get_config("app").get("releases_update_only")
             version_res = RequestUtils(proxies=Config().get_proxies()).get_res(
-                "https://api.github.com/repos/hsuyelin/nas-tools/releases/latest")
+                "https://api.github.com/repos/feimao999/nas-tools-new/releases/latest")
             commit_res = RequestUtils(proxies=Config().get_proxies()).get_res(
-                "https://api.github.com/repos/hsuyelin/nas-tools/commits/master")
+                "https://api.github.com/repos/feimao999/nas-tools-new/commits/master")
             if version_res and commit_res:
                 ver_json = version_res.json()
                 commit_json = commit_res.json()

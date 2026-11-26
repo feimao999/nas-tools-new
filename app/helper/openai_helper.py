@@ -611,7 +611,9 @@ class OpenAiHelper:
                 "4. Put clean English title (without 'Movie XX' numbering, e.g. 'Detective Conan: Fallen Angel of the Highway') in 'en_title' if present/known, else ''.\n"
                 "5. Put 2 to 4 TMDB search queries in 'search_keywords' ordered from specific to broad: MUST include standalone distinctive subtitles (e.g. 'Fallen Angel of the Highway') and localized franchise aliases (e.g. 'Case Closed: Fallen Angel of the Highway') when applicable.\n"
                 "6. Set 'type' to 'movie' for films & theatrical anime movies ('Movie XX'/'The Movie'/'剧场版' is ALWAYS 'movie' with season=null, episode=null), or 'tv' for episodic TV/anime series.\n"
-                "7. Return ONLY a valid JSON object without explanation:\n"
+                "7. For multi-season anime where each season uses a different subtitle/arc name (e.g. 'Kaguya-sama: Ultra Romantic', 'Demon Slayer: Entertainment District Arc / 游郭篇'): put the parent TV series title in 'title'/'original_title'/'en_title' (put the arc subtitle in 'search_keywords'), and set 'season' to its actual TMDB season number (e.g. 2, 3, 4). Use web search if enabled to verify.\n"
+                "8. For series specials ('OVA', 'OAD', 'SP', 'Special', '特典') belonging to a TV/anime series (not standalone theatrical films): set 'type' to 'tv', 'season' to 0 (TMDB Specials / S00), and use the same parent TV series title so they organize into the same show folder.\n"
+                "9. Return ONLY a valid JSON object without explanation:\n"
                 '{"title":string,"original_title":string,"en_title":string,"search_keywords":[string],"type":"movie"|"tv"|null,"version":string,"part":string,"year":string,"resolution":string,"season":number|null,"episode":number|null}'
             )
             result = self.__get_model(

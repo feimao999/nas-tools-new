@@ -287,7 +287,7 @@ class MetaBase(object):
 
     # 更新季
     def set_season(self, sea):
-        if not sea:
+        if sea is None or sea == "" or sea == []:
             return
         if isinstance(sea, list):
             if len(sea) == 1 and str(sea[0]).isdigit():
@@ -302,7 +302,7 @@ class MetaBase(object):
 
     # 更新集
     def set_episode(self, ep):
-        if not ep:
+        if ep is None or ep == "" or ep == []:
             return
         if isinstance(ep, list):
             if len(ep) == 1 and str(ep[0]).isdigit():

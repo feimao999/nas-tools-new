@@ -455,14 +455,29 @@ def _load_media_class():
 
     class _DummyMetaInfo:
         def __init__(self, title, subtitle=None, mtype=None, filePath=None, **kwargs):
+            import re as _re
             self.org_string = title
             self.subtitle = subtitle
-            self._name = "WrongRegexTitle" if "MessyGroup" in (title or "") else (title or "")
+            raw = title or ""
+            ep_m = _re.search(r"\[(\d+)\]", raw)
+            ova_m = _re.search(r"\[OVA(\d+)\]", raw, _re.IGNORECASE)
+            if ova_m:
+                self._name = "Kaguya-sama"
+                self.begin_episode = int(ova_m.group(1))
+            elif ep_m:
+                # 去掉 [Sub] 和 [01].mkv 保留稳定季名
+                cleaned = _re.sub(r"\[[^\]]+\]|\.\w+$", "", raw).strip()
+                self._name = cleaned or raw
+                self.begin_episode = int(ep_m.group(1))
+            else:
+                self._name = "WrongRegexTitle" if "MessyGroup" in raw else raw
+                self.begin_episode = None
             self.year = None
+            self.cn_name = self._name
+            self.en_name = self._name
             self.type = mtype or MediaType.TV
             self.begin_season = None
             self.end_season = None
-            self.begin_episode = None
             self.end_episode = None
             self.tmdb_info = None
 
@@ -470,17 +485,21 @@ def _load_media_class():
             return self._name
 
         def get_season_string(self):
-            return f"S{self.begin_season:02d}" if self.begin_season else "S01"
+            return f"S{self.begin_season:02d}" if self.begin_season is not None else "S01"
 
         def get_episode_string(self):
-            return f"E{self.begin_episode:02d}" if self.begin_episode else ""
+            return f"E{self.begin_episode:02d}" if self.begin_episode is not None else ""
 
         def set_season(self, sea):
-            if sea is not None and str(sea).isdigit():
+            if sea is None or sea == "" or sea == []:
+                return
+            if str(sea).isdigit():
                 self.begin_season = int(sea)
 
         def set_episode(self, ep):
-            if ep is not None and str(ep).isdigit():
+            if ep is None or ep == "" or ep == []:
+                return
+            if str(ep).isdigit():
                 self.begin_episode = int(ep)
 
         def set_tmdb_info(self, info):
@@ -515,7 +534,10 @@ def _load_media_class():
 
     metainfo_mod = types.ModuleType("app.media.meta.metainfo")
     metainfo_mod.MetaInfo = _DummyMetaInfo
-    sys.modules["app.media.meta"] = types.ModuleType("app.media.meta")
+    meta_pkg = types.ModuleType("app.media.meta")
+    meta_pkg.__path__ = [str(ROOT_DIR / "app" / "media" / "meta")]
+    meta_pkg.MetaInfo = _DummyMetaInfo
+    sys.modules["app.media.meta"] = meta_pkg
     sys.modules["app.media.meta.metainfo"] = metainfo_mod
 
     tmdb_mod = types.ModuleType("app.media.tmdbv3api")
@@ -800,6 +822,149 @@ class TestMediaAIPriorityAndFallback(unittest.TestCase):
             self.assertIsNone(info.begin_season)
             self.assertIsNone(info.begin_episode)
             self.assertEqual(mock_post.call_count, 2)
+
+    def test_metabase_set_season_zero_supported(self):
+        import re as stdlib_re
+
+        cfg_mod = sys.modules["config"]
+        cfg_mod.ANIME_GENREIDS = [16]
+        cfg_mod.DEFAULT_TMDB_IMAGE = ""
+
+        with patch.dict(
+            sys.modules,
+            {
+                "regex": stdlib_re,
+                "cn2an": types.ModuleType("cn2an"),
+                "app.media.fanart": types.SimpleNamespace(Fanart=MagicMock),
+                "app.media.category": types.SimpleNamespace(Category=MagicMock),
+            },
+        ):
+            sys.modules["app.utils"].ExceptionUtils = MagicMock()
+            import importlib
+            meta_base_mod = importlib.import_module("app.media.meta._base")
+            meta = meta_base_mod.MetaBase("test")
+            meta.type = self.MediaType.TV
+            meta.set_season(0)
+            self.assertEqual(meta.begin_season, 0)
+            self.assertEqual(meta.get_season_string(), "S00")
+            meta.set_episode(0)
+            self.assertEqual(meta.begin_episode, 0)
+
+    def test_multi_season_anime_caches_ai_season_and_isolates_ova(self):
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-test",
+            "model": "gemini-2.5-flash",
+            "ai_priority": True,
+            "web_search": False,
+        }
+
+        def fake_search_tmdb(file_media_name, search_type, first_media_year=None, media_year=None, season_number=None):
+            if "辉夜大小姐" in (file_media_name or "") or "Kaguya" in (file_media_name or ""):
+                return {"id": 83121, "name": "辉夜大小姐想让我告白", "media_type": self.MediaType.TV, "genres": [16]}
+            return {}
+
+        self.media._Media__search_tmdb = MagicMock(side_effect=fake_search_tmdb)
+        self.media.get_tmdb_info = MagicMock(
+            side_effect=lambda mtype, tmdbid, **kw: {
+                "id": tmdbid,
+                "name": "辉夜大小姐想让我告白",
+                "media_type": self.MediaType.TV,
+                "genres": [16],
+            }
+        )
+
+        utils_mod = sys.modules["app.utils"]
+        utils_mod.PathUtils.get_bluray_dir = MagicMock(return_value=False)
+        utils_mod.PathUtils.get_parent_paths = MagicMock(return_value="")
+        utils_mod.NumberUtils.max_ele = lambda a, b: b if a is None else (a if b is None else max(a, b))
+
+        season3_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"辉夜大小姐想让我告白","original_title":"かぐや様は告らせたい","en_title":"Kaguya-sama: Love is War","search_keywords":["Kaguya-sama Ultra Romantic"],"type":"tv","version":"","part":"","year":"","resolution":"1080p","season":3,"episode":1}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        ova_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"辉夜大小姐想让我告白","original_title":"かぐや様は告らせたい","en_title":"Kaguya-sama: Love is War","search_keywords":[],"type":"tv","version":"","part":"","year":"","resolution":"1080p","season":0,"episode":1}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        ep1 = r"D:\anime\Kaguya\[Sub] Kaguya-sama Ultra Romantic [01].mkv"
+        ep2 = r"D:\anime\Kaguya\[Sub] Kaguya-sama Ultra Romantic [02].mkv"
+        ova = r"D:\anime\Kaguya\[Sub] Kaguya-sama [OVA01].mkv"
+
+        with patch("os.path.exists", return_value=True), patch("os.path.isdir", return_value=False):
+            # 第 1、2 集一起识别：仅第 1 集请求 AI（1 次），第 2 集复用 [AI] 缓存并保留 season=3
+            with patch.object(requests, "post", return_value=_make_response(200, season3_reply)) as mock_post:
+                res_map = self.media.get_media_info_on_files([ep1, ep2])
+                self.assertEqual(mock_post.call_count, 1)
+                self.assertEqual(res_map[ep1].tmdb_info["id"], 83121)
+                self.assertEqual(res_map[ep1].begin_season, 3)
+                self.assertEqual(res_map[ep1].begin_episode, 1)
+                self.assertEqual(res_map[ep2].tmdb_info["id"], 83121)
+                self.assertEqual(res_map[ep2].begin_season, 3)
+                self.assertEqual(res_map[ep2].begin_episode, 2)
+
+            # 同文件夹内的 OVA 文件：不复用正片缓存，单独调用 AI 得到 season=0（S00）并同属 83121
+            with patch.object(requests, "post", return_value=_make_response(200, ova_reply)) as mock_post:
+                ova_map = self.media.get_media_info_on_files([ova])
+                self.assertEqual(mock_post.call_count, 1)
+                self.assertEqual(ova_map[ova].tmdb_info["id"], 83121)
+                self.assertEqual(ova_map[ova].begin_season, 0)
+                self.assertEqual(ova_map[ova].get_season_string(), "S00")
+                self.assertEqual(ova_map[ova].begin_episode, 1)
+
+    def test_web_utils_image_version_and_fork_urls(self):
+        import importlib
+        import os
+
+        sys.modules["app.media"].Media = self.Media
+        sys.modules["app.media"].Bangumi = MagicMock
+        sys.modules["app.media"].DouBan = MagicMock
+        sys.modules["app.utils"].ExceptionUtils = MagicMock()
+        sys.modules["app.utils"].IpUtils = MagicMock()
+        sys.modules["app.utils"].SystemUtils = MagicMock()
+        sys.modules["app.utils"].SystemUtils.execute = MagicMock(return_value="abcdef123456")
+
+        req_mock = MagicMock()
+        ver_resp = MagicMock()
+        ver_resp.json.return_value = {"tag_name": "v3.4.1.9", "html_url": "https://github.com/feimao999/nas-tools-new/releases/tag/v3.4.1.9"}
+        commit_resp = MagicMock()
+        commit_resp.json.return_value = {"sha": "1234567890"}
+        req_mock.get_res.side_effect = [ver_resp, commit_resp]
+        sys.modules["app.utils"].RequestUtils = MagicMock(return_value=req_mock)
+
+        with patch.dict(
+            sys.modules,
+            {"cn2an": types.ModuleType("cn2an")},
+        ):
+            web_utils_mod = importlib.import_module("web.backend.web_utils")
+            with patch.dict(os.environ, {"NASTOOL_IMAGE_VERSION": "v3.4.1.9"}):
+                self.assertEqual(web_utils_mod.WebUtils.get_current_version(), "v3.4.1.9 abcdef1")
+
+            ver, url = web_utils_mod.WebUtils.get_latest_version()
+            self.assertEqual(ver, "v3.4.1.9 1234567")
+            self.assertEqual(url, "https://github.com/feimao999/nas-tools-new/releases/tag/v3.4.1.9")
+            called_urls = [call[0][0] for call in req_mock.get_res.call_args_list]
+            self.assertIn("https://api.github.com/repos/feimao999/nas-tools-new/releases/latest", called_urls)
+            self.assertIn("https://api.github.com/repos/feimao999/nas-tools-new/commits/master", called_urls)
 
 
 if __name__ == "__main__":
