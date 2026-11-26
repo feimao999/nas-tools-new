@@ -10,6 +10,9 @@ RUN apk add --no-cache --virtual .build-deps \
     && if [ "$(uname -m)" = "x86_64" ]; then ARCH=amd64; elif [ "$(uname -m)" = "aarch64" ]; then ARCH=arm64; fi \
     && curl https://dl.min.io/client/mc/release/linux-${ARCH}/mc --create-dirs -o /usr/bin/mc \
     && chmod +x /usr/bin/mc \
+    && echo "setuptools==68.2.2" > /tmp/pip-constraints.txt \
+    && echo "wheel==0.41.2" >> /tmp/pip-constraints.txt \
+    && export PIP_CONSTRAINT=/tmp/pip-constraints.txt \
     && pip install --upgrade pip setuptools wheel \
     && pip install cython \
     && pip install -r https://raw.githubusercontent.com/feimao999/nas-tools-new/master/requirements.txt \
