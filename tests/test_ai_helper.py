@@ -623,6 +623,184 @@ class TestMediaAIPriorityAndFallback(unittest.TestCase):
             self.assertEqual(recovered_info.tmdb_info["id"], 126308)
             self.assertEqual(recovered_info.begin_season, 2)
 
+    def test_gemini_web_search_grounding_and_auto_downgrade(self):
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-test",
+            "model": "gemini-2.5-flash",
+            "web_search": True,
+        }
+        helper = OpenAiHelper()
+        grounded_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "Found via Google Search:\n"},
+                            {
+                                "text": '```json\n{"title":"名侦探柯南：高速公路的堕天使","original_title":"名探偵コナン ハイウェイの堕天使","en_title":"Detective Conan: Fallen Angel of the Highway","search_keywords":["Fallen Angel of the Highway"],"type":"movie","version":"","part":"","year":"2026","resolution":"2160p","season":null,"episode":null}\n```'
+                            },
+                        ]
+                    }
+                }
+            ]
+        }
+        with patch.object(requests, "post", return_value=_make_response(200, grounded_reply)) as mock_post:
+            res = helper.get_media_name(
+                "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip].mkv"
+            )
+            self.assertEqual(res["title"], "名侦探柯南：高速公路的堕天使")
+            self.assertEqual(res["year"], "2026")
+            payload = mock_post.call_args[1]["json"]
+            self.assertEqual(payload["tools"], [{"google_search": {}}])
+            # 开启 google_search 时不能带 responseMimeType=application/json
+            self.assertNotIn("responseMimeType", payload.get("generationConfig", {}))
+
+        # 若联网配额用尽或模型不支持 google_search 返回 400，应自动无感降级为离线 JSON 模式重试
+        offline_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"Detective Conan: Fallen Angel of the Highway","original_title":"","en_title":"Detective Conan: Fallen Angel of the Highway","search_keywords":["Fallen Angel of the Highway"],"type":"movie","version":"","part":"","year":"","resolution":"2160p","season":null,"episode":null}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        with patch.object(
+            requests,
+            "post",
+            side_effect=[
+                _make_response(400, json_data={"error": {"message": "Search grounding not supported"}}),
+                _make_response(200, offline_reply),
+            ],
+        ) as mock_post:
+            res2 = helper.get_media_name(
+                "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip].mkv"
+            )
+            self.assertEqual(res2["search_keywords"], ["Fallen Angel of the Highway"])
+            self.assertEqual(mock_post.call_count, 2)
+            second_payload = mock_post.call_args_list[1][1]["json"]
+            self.assertNotIn("tools", second_payload)
+            self.assertEqual(second_payload["generationConfig"]["responseMimeType"], "application/json")
+
+    def test_claude_web_search_with_preamble_text(self):
+        Config.openai_cfg = {
+            "provider": "claude",
+            "api_key": "sk-ant-test",
+            "model": "claude-sonnet-4-5",
+            "web_search": True,
+        }
+        helper = OpenAiHelper()
+        claude_reply = {
+            "content": [
+                {"type": "text", "text": "Let me search for Detective Conan Movie 29..."},
+                {"type": "server_tool_use", "name": "web_search"},
+                {
+                    "type": "text",
+                    "text": '{"title":"名侦探柯南：高速公路的堕天使","original_title":"名探偵コナン ハイウェイの堕天使","en_title":"Detective Conan: Fallen Angel of the Highway","search_keywords":["Fallen Angel of the Highway"],"type":"movie","version":"","part":"","year":"2026","resolution":"2160p","season":null,"episode":null}',
+                },
+            ]
+        }
+        with patch.object(requests, "post", return_value=_make_response(200, claude_reply)) as mock_post:
+            res = helper.get_media_name("Detective Conan Movie 29 Fallen Angel of the Highway.mkv")
+            self.assertEqual(res["title"], "名侦探柯南：高速公路的堕天使")
+            payload = mock_post.call_args[1]["json"]
+            self.assertEqual(payload["tools"][0]["type"], "web_search_20250305")
+
+    def test_two_stage_conan_movie_29_candidate_selection(self):
+        """
+        模拟柯南 M29 场景：即使第一阶段精确相等未命中（例如离线模式且 TMDB 译名为 Case Closed / 日文原名），
+        第二阶段通过副标题 'Fallen Angel of the Highway' 从 TMDB 召回候选列表并由 AI 精准拍板命中
+        """
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-test",
+            "model": "gemini-2.5-flash",
+            "ai_priority": True,
+            "web_search": False,
+        }
+        # 常规精确全等返回空（模拟 Detective Conan != Case Closed 导致的字面不相等）
+        self.media._Media__search_tmdb = MagicMock(return_value={})
+        self.media._Media__search_multi_tmdb = MagicMock(return_value={})
+
+        # 模拟 TMDB 原始搜索结果：包含 M28 干扰项与 M29 真条目
+        def fake_movies_search(params):
+            q = params.get("query", "")
+            if "Fallen Angel of the Highway" in q:
+                return [
+                    {
+                        "id": 280001,
+                        "title": "名侦探柯南：独眼的残像",
+                        "original_title": "名探偵コナン 隻眼の残像",
+                        "release_date": "2025-04-18",
+                        "overview": "第28部剧场版",
+                    },
+                    {
+                        "id": 290029,
+                        "title": "名侦探柯南：高速公路的堕天使",
+                        "original_title": "名探偵コナン ハイウェイの堕天使",
+                        "release_date": "2026-04-10",
+                        "overview": "第29部剧场版，神奈川县警萩原千速与失控黑色摩托车路西法的事件",
+                    },
+                ]
+            return []
+
+        self.media.search = MagicMock()
+        self.media.search.movies = MagicMock(side_effect=fake_movies_search)
+        self.media.search.multi = MagicMock(return_value=[])
+        self.media.get_tmdb_info = MagicMock(
+            side_effect=lambda mtype, tmdbid, **kw: {
+                "id": tmdbid,
+                "title": "名侦探柯南：高速公路的堕天使",
+                "original_title": "名探偵コナン ハイウェイの堕天使",
+                "media_type": self.MediaType.MOVIE,
+                "genres": [16],
+            }
+        )
+
+        stage1_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"Detective Conan: Fallen Angel of the Highway","original_title":"","en_title":"Detective Conan: Fallen Angel of the Highway","search_keywords":["Detective Conan Fallen Angel of the Highway","Fallen Angel of the Highway"],"type":"movie","version":"BDRip","part":"","year":"","resolution":"2160p","season":null,"episode":null}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        stage2_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": '{"tmdb_id":290029,"type":"movie"}'}
+                        ]
+                    }
+                }
+            ]
+        }
+
+        fname = "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip][HEVC-10bit][JPN][FLACx3].mkv"
+        with patch.object(
+            requests,
+            "post",
+            side_effect=[_make_response(200, stage1_reply), _make_response(200, stage2_reply)],
+        ) as mock_post:
+            info = self.media.get_media_info(fname, cache=False)
+            self.assertEqual(info.tmdb_info["id"], 290029)
+            self.assertEqual(info.tmdb_info["title"], "名侦探柯南：高速公路的堕天使")
+            self.assertEqual(info.type, self.MediaType.MOVIE)
+            self.assertIsNone(info.begin_season)
+            self.assertIsNone(info.begin_episode)
+            self.assertEqual(mock_post.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

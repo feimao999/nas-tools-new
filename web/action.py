@@ -2119,7 +2119,7 @@ class WebAction:
         subtitle = data.get("subtitle")
         if not name:
             return {"code": -1}
-        media_info = Media().get_media_info(title=name, subtitle=subtitle)
+        media_info = Media().get_media_info(title=name, subtitle=subtitle, cache=False)
         if not media_info:
             return {"code": 0, "data": {"name": "无法识别"}}
         return {"code": 0, "data": self.mediainfo_dict(media_info)}

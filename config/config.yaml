@@ -176,6 +176,8 @@ openai:
   model: gpt-4o-mini
   # 【优先使用 AI 识别】：开启后优先通过 AI 解析种子名/文件名再匹配 TMDB；当 AI 调用失败（如 API 额度上限/超时）或无结果时自动回退到常规 TMDB 识别
   ai_priority: false
+  # 【允许 AI 联网搜索】：开启后识别文件名时允许模型实时联网检索最新影视/动漫译名与年份（支持 Gemini Google Search、Claude、OpenAI；不支持或超额时自动无感降级）
+  web_search: false
 
 # 【OCR】
 ocr:

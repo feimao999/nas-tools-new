@@ -25,6 +25,7 @@ class OpenAiHelper:
     _api_key = ""
     _api_url = ""
     _model = ""
+    _web_search = False
     _proxies = None
     _timeout = 60
 
@@ -47,7 +48,7 @@ class OpenAiHelper:
     _OPENAI_CHAT_PREFIXES = ("gpt-", "chatgpt-", "o1", "o3", "o4", "gpt")
     _OPENAI_NON_CHAT_KEYWORDS = (
         "embedding", "whisper", "tts", "dall-e", "davinci", "babbage",
-        "moderation", "realtime", "audio", "transcribe", "image", "search",
+        "moderation", "realtime", "audio", "transcribe", "image",
     )
     _GEMINI_NON_CHAT_KEYWORDS = (
         "embedding", "aqa", "imagen", "tts", "image-generation", "veo",
@@ -69,6 +70,7 @@ class OpenAiHelper:
         self._api_url = (cfg.get("api_url") or "").strip().rstrip("/")
         default_model = self._DEFAULT_MODELS.get(self._provider, "gpt-4o-mini")
         self._model = (cfg.get("model") or "").strip() or default_model
+        self._web_search = bool(cfg.get("web_search"))
         self._proxies = Config().get_proxies()
 
     def get_state(self):
@@ -251,11 +253,19 @@ class OpenAiHelper:
     @staticmethod
     def _extract_json(text):
         """
-        从 AI 返回文本中提取并解析 JSON（兼容 Markdown 代码块与推理模型的 <think> 标签）
+        从 AI 返回文本中提取并解析 JSON（兼容联网搜索前言文本、Markdown 代码块与推理模型的 <think> 标签）
         """
         if not text:
             return {}
         cleaned = re.sub(r"<think>.*?</think>", "", str(text), flags=re.IGNORECASE | re.DOTALL).strip()
+        fenced_blocks = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        for block in reversed(fenced_blocks):
+            try:
+                parsed = json.loads(block.strip())
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                continue
         fence_match = re.match(r"^```(?:json)?\s*(.*?)\s*```$", cleaned, flags=re.IGNORECASE | re.DOTALL)
         if fence_match:
             cleaned = fence_match.group(1).strip()
@@ -263,11 +273,15 @@ class OpenAiHelper:
             parsed = json.loads(cleaned)
             return parsed if isinstance(parsed, dict) else {}
         except Exception:
-            start = cleaned.find("{")
-            end = cleaned.rfind("}")
-            if start != -1 and end > start:
-                parsed = json.loads(cleaned[start:end + 1])
-                return parsed if isinstance(parsed, dict) else {}
+            decoder = json.JSONDecoder()
+            brace_positions = [m.start() for m in re.finditer(r"\{", cleaned)]
+            for pos in reversed(brace_positions):
+                try:
+                    parsed, _ = decoder.raw_decode(cleaned[pos:])
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    continue
             raise
 
     @staticmethod
@@ -294,7 +308,7 @@ class OpenAiHelper:
                 response=resp,
             )
 
-    def _call_openai_compatible(self, messages, user=None, json_mode=False, **kwargs):
+    def _call_openai_compatible(self, messages, user=None, json_mode=False, use_web_search=False, **kwargs):
         """
         调用 OpenAI / Ollama / LM Studio / DeepSeek / One-API 等兼容 Chat Completions 接口
         """
@@ -309,12 +323,14 @@ class OpenAiHelper:
         }
         if self._provider == "openai" and user:
             payload["user"] = user
-        for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
-            if key in kwargs and kwargs[key] is not None:
-                payload[key] = kwargs[key]
-        if json_mode and self._provider in ("openai", "local"):
-            # 保持兼容，不强行注入第三方接口可能不支持的参数
-            pass
+        is_search_model = "search" in (self._model or "").lower()
+        if not is_search_model:
+            for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
+                if key in kwargs and kwargs[key] is not None:
+                    payload[key] = kwargs[key]
+        if use_web_search and self._provider == "openai" and not is_search_model:
+            if not self._api_url or "api.openai.com" in self._api_url.lower():
+                payload["web_search_options"] = {"search_context_size": "low"}
 
         resp = requests.post(
             endpoint,
@@ -331,7 +347,7 @@ class OpenAiHelper:
         content = (choices[0].get("message") or {}).get("content")
         return content or ""
 
-    def _call_claude(self, messages, json_mode=False, **kwargs):
+    def _call_claude(self, messages, json_mode=False, use_web_search=False, **kwargs):
         """
         调用 Anthropic Claude Messages 原生接口
         """
@@ -362,6 +378,14 @@ class OpenAiHelper:
             payload["system"] = "\n".join(system_parts)
         if kwargs.get("temperature") is not None:
             payload["temperature"] = kwargs["temperature"]
+        if use_web_search:
+            payload["tools"] = [
+                {
+                    "type": "web_search_20250305",
+                    "name": "web_search",
+                    "max_uses": 2,
+                }
+            ]
 
         resp = requests.post(
             endpoint,
@@ -378,12 +402,12 @@ class OpenAiHelper:
             for block in blocks
             if isinstance(block, dict) and block.get("type") == "text"
         ]
-        result = "".join(texts)
+        result = "\n".join(t for t in texts if t)
         if not result:
             raise ValueError(f"Claude 响应中缺少有效 content 字段: {data}")
         return result
 
-    def _call_gemini(self, messages, json_mode=False, **kwargs):
+    def _call_gemini(self, messages, json_mode=False, use_web_search=False, **kwargs):
         """
         调用 Google Gemini generateContent 原生接口
         """
@@ -415,10 +439,13 @@ class OpenAiHelper:
             gen_config["temperature"] = kwargs["temperature"]
         if kwargs.get("top_p") is not None:
             gen_config["topP"] = kwargs["top_p"]
-        if json_mode:
+        # Gemini 开启 google_search 工具时不能同时强制 responseMimeType=application/json（部分模型会返回 400）
+        if json_mode and not use_web_search:
             gen_config["responseMimeType"] = "application/json"
         if gen_config:
             payload["generationConfig"] = gen_config
+        if use_web_search:
+            payload["tools"] = [{"google_search": {}}]
 
         resp = requests.post(
             endpoint,
@@ -531,20 +558,36 @@ class OpenAiHelper:
             filtered.append(model_id)
         return sorted(set(filtered))
 
-    def __get_model(self, message, prompt=None, user="NAStool", json_mode=False, **kwargs):
+    def _dispatch_model(self, messages, user="NAStool", json_mode=False, use_web_search=False, **kwargs):
+        if self._provider == "claude":
+            return self._call_claude(messages, json_mode=json_mode, use_web_search=use_web_search, **kwargs)
+        if self._provider == "gemini":
+            return self._call_gemini(messages, json_mode=json_mode, use_web_search=use_web_search, **kwargs)
+        return self._call_openai_compatible(
+            messages, user=user, json_mode=json_mode, use_web_search=use_web_search, **kwargs
+        )
+
+    def __get_model(self, message, prompt=None, user="NAStool", json_mode=False, use_web_search=False, **kwargs):
         """
-        按当前配置的服务商调用对应 AI 模型并返回文本内容
+        按当前配置的服务商调用对应 AI 模型并返回文本内容；若开启联网但模型不支持或联网额度用尽，自动降级离线重试
         """
         messages = self._normalize_messages(message, prompt=prompt)
-        if self._provider == "claude":
-            return self._call_claude(messages, json_mode=json_mode, **kwargs)
-        if self._provider == "gemini":
-            return self._call_gemini(messages, json_mode=json_mode, **kwargs)
-        return self._call_openai_compatible(messages, user=user, json_mode=json_mode, **kwargs)
+        enable_search = bool(use_web_search and self._provider != "local")
+        if enable_search:
+            try:
+                return self._dispatch_model(
+                    messages, user=user, json_mode=json_mode, use_web_search=True, **kwargs
+                )
+            except (_AIRateLimitError, requests.exceptions.HTTPError) as e:
+                msg = f"【AI】联网搜索不可用或达到联网配额上限，自动降级为离线识别重试：{str(e)}"
+                log.warn(msg) if log else print(msg)
+        return self._dispatch_model(
+            messages, user=user, json_mode=json_mode, use_web_search=False, **kwargs
+        )
 
     def get_media_name(self, filename):
         """
-        从文件名或种子名中提取媒体名称等要素
+        第一阶段：从文件名或种子名中提取媒体名称、原名、多路 TMDB 搜索词与季集要素（支持可选联网检索）
         :param filename: 文件名或种子名（可附带副标题）
         :return: Json dict | None
         """
@@ -552,16 +595,31 @@ class OpenAiHelper:
             return None
         result = ""
         try:
-            _filename_prompt = (
-                "You are a media filename parser. Extract clean movie/TV metadata from the given filename or torrent title.\n"
-                "Rules:\n"
-                "1. Strip release groups, subtitle groups, codecs, sources, and episode titles from title.\n"
-                "2. Prefer Chinese title in 'title' if present; put English/original title in 'en_title' if also present.\n"
-                "3. Set 'type' to 'tv' if episodic/series/anime season, or 'movie' if a film.\n"
-                "4. Return ONLY a valid JSON object without markdown formatting or explanation:\n"
-                '{"title":string,"en_title":string,"type":"movie"|"tv"|null,"version":string,"part":string,"year":string,"resolution":string,"season":number|null,"episode":number|null}'
+            search_hint = (
+                "If the release is a recent/unfamiliar movie, anime theatrical film (e.g. 'Movie 29'), or non-Chinese title, "
+                "use web search to find its official Chinese title, original-language title (e.g. Japanese), and release year on TMDB/Wikipedia.\n"
+                if self._web_search and self._provider != "local"
+                else ""
             )
-            result = self.__get_model(prompt=_filename_prompt, message=filename, json_mode=True)
+            _filename_prompt = (
+                "You are an expert media filename & torrent parser for TMDB metadata matching.\n"
+                f"{search_hint}"
+                "Rules:\n"
+                "1. Strip release/fansub groups ([DBD-Raws], [VCB-Studio], etc.), resolutions, codecs, audio tags, and non-official sequel numbering like 'Movie 29', 'M29', 'The Movie 29', '剧场版29' that TMDB does NOT include in official titles.\n"
+                "2. Put official Chinese title in 'title' ONLY if known with high confidence; otherwise put the clean title from the filename (do NOT guess fake translations).\n"
+                "3. Put official original-language title (e.g. Japanese '名探偵コナン ハイウェイの堕天使') in 'original_title' if known, else ''.\n"
+                "4. Put clean English title (without 'Movie XX' numbering, e.g. 'Detective Conan: Fallen Angel of the Highway') in 'en_title' if present/known, else ''.\n"
+                "5. Put 2 to 4 TMDB search queries in 'search_keywords' ordered from specific to broad: MUST include standalone distinctive subtitles (e.g. 'Fallen Angel of the Highway') and localized franchise aliases (e.g. 'Case Closed: Fallen Angel of the Highway') when applicable.\n"
+                "6. Set 'type' to 'movie' for films & theatrical anime movies ('Movie XX'/'The Movie'/'剧场版' is ALWAYS 'movie' with season=null, episode=null), or 'tv' for episodic TV/anime series.\n"
+                "7. Return ONLY a valid JSON object without explanation:\n"
+                '{"title":string,"original_title":string,"en_title":string,"search_keywords":[string],"type":"movie"|"tv"|null,"version":string,"part":string,"year":string,"resolution":string,"season":number|null,"episode":number|null}'
+            )
+            result = self.__get_model(
+                prompt=_filename_prompt,
+                message=filename,
+                json_mode=True,
+                use_web_search=self._web_search,
+            )
             return self._extract_json(result)
         except _AIRateLimitError as e:
             msg = f"【AI】接口达到频率或额度上限，跳过本次AI识别：{str(e)}"
@@ -569,6 +627,51 @@ class OpenAiHelper:
             return {}
         except Exception as e:
             msg = f"【AI】解析媒体名称失败（{str(e)}）：{result}"
+            log.warn(msg) if log else print(msg)
+            return {}
+
+    def select_tmdb_candidate(self, filename, candidates, parsed_info=None):
+        """
+        第二阶段：当字面全等未直接命中时，让 AI 从 TMDB 真实检索候选列表中选出匹配的 tmdb_id
+        :param filename: 原始文件名/种子名
+        :param candidates: TMDB 候选字典列表
+        :param parsed_info: 第一阶段 AI 解析结果（可选参考）
+        :return: {"tmdb_id": int|None, "type": "movie"|"tv"|None}
+        """
+        if not self.get_state() or not candidates:
+            return {}
+        result = ""
+        try:
+            _select_prompt = (
+                "You match a media filename/torrent against real TMDB search results.\n"
+                "Compare the filename and parsed hints against each candidate's title, original_title, year, type, and overview.\n"
+                "Rules:\n"
+                "1. Recognize cross-language equivalents (e.g. English subtitle 'Fallen Angel of the Highway' == Japanese 'ハイウェイの堕天使' == Chinese '高速公路的堕天使'; 'Detective Conan' == 'Case Closed' == '名侦探柯南').\n"
+                "2. Distinguish sequels/installments carefully: do NOT pick a different movie number or TV series if the subtitle/year does not match.\n"
+                "3. If NONE of the candidates matches this media file, return {\"tmdb_id\": null, \"type\": null}.\n"
+                "4. Return ONLY a valid JSON object:\n"
+                '{"tmdb_id":number|null,"type":"movie"|"tv"|null}'
+            )
+            hint_obj = {}
+            if isinstance(parsed_info, dict):
+                for k in ("title", "original_title", "en_title", "type", "year", "season", "episode"):
+                    if parsed_info.get(k) not in (None, ""):
+                        hint_obj[k] = parsed_info.get(k)
+            user_msg = (
+                f"Filename:\n{filename}\n\n"
+                f"Parsed hints:\n{json.dumps(hint_obj, ensure_ascii=False)}\n\n"
+                f"TMDB candidates:\n{json.dumps(candidates, ensure_ascii=False)}"
+            )
+            result = self.__get_model(
+                prompt=_select_prompt,
+                message=user_msg,
+                json_mode=True,
+                use_web_search=False,
+                temperature=0,
+            )
+            return self._extract_json(result)
+        except Exception as e:
+            msg = f"【AI】候选列表二次匹配失败（{str(e)}）：{result}"
             log.warn(msg) if log else print(msg)
             return {}
 

@@ -524,7 +524,7 @@
               </div>
             </div>
             <div class="row mt-1">
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-4">
                 <div class="mb-3">
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="laboratory.chatgpt_enable" {% if
@@ -536,13 +536,25 @@
                   </label>
                 </div>
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-4">
                 <div class="mb-3">
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="openai.ai_priority" {% if
                       Config.openai and Config.openai.ai_priority %}checked{% endif %}>
                     <span class="form-check-label">优先使用 AI 识别 <span class="form-help"
                                                                           title="开启后每次识别优先使用 AI 提取片名、年份、季集再去匹配 TMDB，避免常规规则把名称识别错；当 AI 调用失败（如达到 API 使用上限、网络超时）或未匹配到结果时，自动回退为常规 TMDB 识别"
+                                                                          data-bs-toggle="tooltip">?</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 col-md-4">
+                <div class="mb-3">
+                  <label class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="openai.web_search" {% if
+                      Config.openai and Config.openai.web_search %}checked{% endif %}>
+                    <span class="form-check-label">允许 AI 联网搜索 <span class="form-help"
+                                                                          title="开启后识别复杂名称或新番/剧场版时允许模型实时联网检索官方中文译名、原语言名与上映年份（支持 Gemini Google Search、Claude、OpenAI；若模型不支持或联网额度用尽，将自动无感降级为离线模式）"
                                                                           data-bs-toggle="tooltip">?</span>
                     </span>
                   </label>
@@ -1455,9 +1467,15 @@
       $("#laboratory\\.chatgpt_enable").prop("checked", true);
     }
   });
+  $("#openai\\.web_search").on("change", function () {
+    if ($(this).prop("checked")) {
+      $("#laboratory\\.chatgpt_enable").prop("checked", true);
+    }
+  });
   $("#laboratory\\.chatgpt_enable").on("change", function () {
     if (!$(this).prop("checked")) {
       $("#openai\\.ai_priority").prop("checked", false);
+      $("#openai\\.web_search").prop("checked", false);
     }
   });
 

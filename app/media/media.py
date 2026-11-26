@@ -474,13 +474,101 @@ class Media:
         if ai_episode is not None and (override or meta_info.begin_episode is None):
             meta_info.set_episode(ai_episode)
 
-    def __search_chatgpt(self, file_name, mtype: MediaType = None, subtitle: str = None):
+    @staticmethod
+    def _extract_ai_queries(file_info):
         """
-        通过 AI 识别文件名/种子名和集数等信息，再查询 TMDB 数据（失败结果不缓存，避免额度恢复后仍不生效）
-        :param file_name: 名称或路径
-        :param mtype: 媒体类型
-        :param subtitle: 种子副标题（可选）
-        :return: 类型、季、集、TMDBINFO
+        从 AI 第一阶段结果中提取主标题列表（用于精确匹配）与扩展搜索词列表（用于候选召回）
+        """
+        def _clean_one(raw):
+            s = str(raw or "").strip()
+            if not s:
+                return []
+            parts = [p.strip() for p in s.split(" / ") if p.strip()] if " / " in s else [s]
+            out = []
+            for p in parts:
+                if "." in p and " " not in p:
+                    p = p.replace(".", " ").strip()
+                if p and p not in out:
+                    out.append(p)
+            return out
+
+        primary_titles = []
+        for key in ("title", "original_title", "en_title"):
+            for item in _clean_one(file_info.get(key)):
+                if item not in primary_titles:
+                    primary_titles.append(item)
+
+        all_queries = list(primary_titles)
+        raw_kws = file_info.get("search_keywords")
+        if isinstance(raw_kws, list):
+            for kw in raw_kws[:6]:
+                for item in _clean_one(kw):
+                    if item not in all_queries:
+                        all_queries.append(item)
+        return primary_titles, all_queries
+
+    def _collect_tmdb_candidates(self, queries, prefer_mtype: MediaType = None):
+        """
+        使用多路关键词向 TMDB 检索原始候选结果（不经过死板全等过滤，供 AI 二次拍板）
+        """
+        if not self.search or not queries:
+            return []
+        seen = set()
+        candidates = []
+
+        def _add_item(item, default_type):
+            if not isinstance(item, dict):
+                return
+            tmdb_id = item.get("id")
+            raw_mt = item.get("media_type") or default_type
+            if raw_mt in ("movie", MediaType.MOVIE):
+                mt_str = "movie"
+            elif raw_mt in ("tv", MediaType.TV):
+                mt_str = "tv"
+            else:
+                return
+            if not tmdb_id or (mt_str, tmdb_id) in seen:
+                return
+            seen.add((mt_str, tmdb_id))
+            title = item.get("title") or item.get("name") or ""
+            orig_title = item.get("original_title") or item.get("original_name") or ""
+            date_str = item.get("release_date") or item.get("first_air_date") or ""
+            overview = (item.get("overview") or "").strip().replace("\n", " ")[:140]
+            candidates.append({
+                "tmdb_id": tmdb_id,
+                "type": mt_str,
+                "title": title,
+                "original_title": orig_title,
+                "year": date_str[:4] if date_str else "",
+                "overview": overview,
+            })
+
+        for q in queries[:5]:
+            try:
+                if prefer_mtype == MediaType.MOVIE:
+                    items = self.search.movies({"query": q}) or []
+                    for it in items[:5]:
+                        _add_item(it, "movie")
+                elif prefer_mtype == MediaType.TV:
+                    items = self.search.tv_shows({"query": q}) or []
+                    for it in items[:5]:
+                        _add_item(it, "tv")
+                if not candidates or prefer_mtype is None:
+                    multis = self.search.multi({"query": q}) or []
+                    for it in multis[:5]:
+                        _add_item(it, None)
+            except Exception as err:
+                log.debug(f"【Meta】TMDB候选检索异常（{q}）：{err}")
+            if len(candidates) >= 8:
+                break
+        return candidates[:8]
+
+    def __search_chatgpt(self, file_name, mtype: MediaType = None, subtitle: str = None, use_cache: bool = True):
+        """
+        两阶段 AI 识别：
+        1) AI 解析（支持可选联网检索）提取中/日/英片名与多路搜索词并尝试精确匹配 TMDB；
+        2) 若字面全等未命中，则用多路搜索词召回 TMDB 候选列表交给 AI 二次确认选出准确 tmdb_id。
+        （失败结果不缓存，避免额度恢复后仍不生效）
         """
 
         def __failed():
@@ -494,7 +582,7 @@ class Media:
 
         query_text = f"{file_name}\n副标题: {subtitle}" if subtitle else file_name
         cache_key = (query_text, mtype.value if mtype else "")
-        if cache_key in self._ai_mem_cache:
+        if use_cache and cache_key in self._ai_mem_cache:
             return self._ai_mem_cache[cache_key]
 
         log.info("【Meta】正在通过AI识别：%s" % file_name)
@@ -513,32 +601,28 @@ class Media:
         season_num = int(season_raw) if season_raw is not None and str(season_raw).isdigit() else None
         episode_num = int(episode_raw) if episode_raw is not None and str(episode_raw).isdigit() else None
 
-        if season_num is not None or episode_num is not None or ai_type_str == "tv":
+        if ai_type_str == "movie" and season_num is None and episode_num is None:
+            mtype = MediaType.MOVIE
+        elif season_num is not None or episode_num is not None or ai_type_str == "tv":
             mtype = MediaType.TV
         elif ai_type_str == "movie":
             mtype = MediaType.MOVIE
         elif not mtype:
             mtype = MediaType.MOVIE
 
-        # 提取候选标题（优先主标题，其次英文/原名标题）
-        candidates = []
-        for key in ("title", "en_title"):
-            raw_t = file_info.get(key)
-            if raw_t:
-                cleaned_t = str(raw_t).split("/")[0].strip().replace(".", " ")
-                if cleaned_t and cleaned_t not in candidates:
-                    candidates.append(cleaned_t)
-        if not candidates:
+        primary_titles, all_queries = self._extract_ai_queries(file_info)
+        if not all_queries:
             return __failed()
 
         file_year = None
         if file_info.get("year"):
             y = str(file_info.get("year")).split("/")[0].strip()
-            if y.isdigit():
+            if y.isdigit() and len(y) == 4:
                 file_year = y
 
+        # 第一阶段快速通道：尝试主标题在 TMDB 中的精确匹配（普通影片 1 次 AI 调用即可命中）
         tmdb_info = {}
-        for cand_title in candidates:
+        for cand_title in primary_titles[:3]:
             if mtype == MediaType.TV:
                 tmdb_info = self.__search_tmdb(
                     file_media_name=cand_title,
@@ -548,7 +632,6 @@ class Media:
                     season_number=season_num,
                 )
                 if not tmdb_info and file_year:
-                    # 兼容文件年份为单季播出年份而非剧集首播年份的情况
                     tmdb_info = self.__search_tmdb(
                         file_media_name=cand_title,
                         search_type=MediaType.TV,
@@ -567,8 +650,33 @@ class Media:
                     mtype = tmdb_info.get("media_type")
                 break
 
+        # 第二阶段候选二次拍板：字面全等未命中时（如剧场版译名差异 Case Closed / 日文原名），召回 TMDB 候选给 AI 挑选
+        if not tmdb_info and hasattr(self.openai, "select_tmdb_candidate"):
+            raw_candidates = self._collect_tmdb_candidates(all_queries, prefer_mtype=mtype)
+            if raw_candidates:
+                log.info("【Meta】常规字面匹配未命中，正在让AI从 %s 个TMDB候选中二次确认..." % len(raw_candidates))
+                picked = self.openai.select_tmdb_candidate(
+                    filename=query_text,
+                    candidates=raw_candidates,
+                    parsed_info=file_info,
+                )
+                picked_id = picked.get("tmdb_id") if isinstance(picked, dict) else None
+                valid_map = {c["tmdb_id"]: c for c in raw_candidates}
+                if picked_id in valid_map:
+                    matched_cand = valid_map[picked_id]
+                    picked_type_str = str(picked.get("type") or matched_cand["type"]).lower()
+                    picked_mtype = MediaType.TV if picked_type_str == "tv" else MediaType.MOVIE
+                    detail = self.get_tmdb_info(mtype=picked_mtype, tmdbid=picked_id)
+                    if detail:
+                        tmdb_info = detail
+                        mtype = tmdb_info.get("media_type") or picked_mtype
+                        log.info(
+                            "【Meta】AI候选二次确认命中：TMDBID=%s, 名称=%s"
+                            % (picked_id, tmdb_info.get("title") or tmdb_info.get("name"))
+                        )
+
         ret = (mtype, season_num, episode_num, tmdb_info)
-        if tmdb_info:
+        if tmdb_info and use_cache:
             if len(self._ai_mem_cache) >= 512:
                 self._ai_mem_cache.clear()
             self._ai_mem_cache[cache_key] = ret
@@ -850,6 +958,7 @@ class Media:
                     file_name=title,
                     mtype=meta_info.type,
                     subtitle=subtitle,
+                    use_cache=cache,
                 )
                 if ai_tmdb_info:
                     self._apply_ai_meta(meta_info, ai_mtype, seaons, episodes, override=True, lock_mtype=bool(mtype))
@@ -914,6 +1023,7 @@ class Media:
                         file_name=title,
                         mtype=meta_info.type,
                         subtitle=subtitle,
+                        use_cache=cache,
                     )
                     self._apply_ai_meta(meta_info, ai_mtype, seaons, episodes, override=False, lock_mtype=bool(mtype))
                 if not file_media_info and has_reg_name and self._search_keyword:
