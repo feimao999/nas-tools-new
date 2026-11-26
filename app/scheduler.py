@@ -8,10 +8,9 @@ import log
 from app.helper import MetaHelper
 from app.mediaserver import MediaServer
 from app.rss import Rss
-from app.sites import SiteUserInfo
 from app.subscribe import Subscribe
 from app.sync import Sync
-from app.utils import ExceptionUtils, SchedulerUtils
+from app.utils import ExceptionUtils
 from app.utils.commons import singleton
 from config import METAINFO_SAVE_INTERVAL, \
     SYNC_TRANSFER_INTERVAL, RSS_CHECK_INTERVAL, \
@@ -41,21 +40,11 @@ class Scheduler:
         """
         self.SCHEDULER = BackgroundScheduler(timezone=Config().get_timezone(),
                                              executors={
-                                                 'default': ThreadPoolExecutor(20)
+                                                 'default': ThreadPoolExecutor(10)
                                              })
         if not self.SCHEDULER:
             return
         if self._pt:
-            # 数据统计
-            ptrefresh_date_cron = self._pt.get('ptrefresh_date_cron')
-            if ptrefresh_date_cron:
-                tz = pytz.timezone(Config().get_timezone())
-                SchedulerUtils.start_job(scheduler=self.SCHEDULER,
-                                         func=SiteUserInfo().refresh_site_data_now,
-                                         func_desc="数据统计",
-                                         cron=str(ptrefresh_date_cron),
-                                         next_run_time=datetime.datetime.now(tz) + datetime.timedelta(minutes=1))
-
             # RSS下载器
             pt_check_interval = self._pt.get('pt_check_interval')
             if pt_check_interval:

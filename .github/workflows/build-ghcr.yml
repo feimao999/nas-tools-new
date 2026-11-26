@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       custom_tag:
-        description: '可选自定义版本号标签（例如 v1.2.0，留空则仅使用自动递增版本号）'
+        description: '可选自定义版本号标签（例如 v4.1.0，留空则仅使用自动递增版本号）'
         required: false
         default: ''
   push:
@@ -34,10 +34,19 @@ jobs:
 
       - name: Release version
         run: |
-          app_version=$(cat version.py | sed -ne "s/APP_VERSION\s=\s'v\(.*\)'/\1/gp")
+          app_version=$(cat version.py | sed -ne "s/APP_VERSION\s*=\s*'v\(.*\)'/\1/gp")
+          latest_patch=$(git tag -l "v${app_version}.*" | sed -E "s/^v${app_version}\.([0-9]+)$/\1/" | grep -E '^[0-9]+$' | sort -n | tail -n 1 || true)
+          if [ -z "$latest_patch" ]; then
+            next_patch=0
+          else
+            next_patch=$((latest_patch + 1))
+          fi
+          full_version="v${app_version}.${next_patch}"
           build_date=$(TZ=Asia/Shanghai date +%Y%m%d)
           echo "app_version=${app_version}" >> $GITHUB_ENV
+          echo "full_version=${full_version}" >> $GITHUB_ENV
           echo "build_date=${build_date}" >> $GITHUB_ENV
+          echo "Computed release version: ${full_version}"
 
       - name: Docker metadata
         id: meta
@@ -46,7 +55,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
-            type=raw,value=v${{ env.app_version }}.${{ github.run_number }}
+            type=raw,value=${{ env.full_version }}
             type=raw,value=${{ env.build_date }}-b${{ github.run_number }}
             type=raw,value=${{ github.event.inputs.custom_tag }},enable=${{ github.event.inputs.custom_tag != '' }}
             type=sha,format=short
@@ -67,7 +76,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: docker
+          context: .
           file: docker/Dockerfile
           platforms: |
             linux/amd64
@@ -75,7 +84,7 @@ jobs:
           push: true
           build-args: |
             BUILD_COMMIT=${{ github.sha }}
-            BUILD_VERSION=v${{ env.app_version }}.${{ github.run_number }}
+            BUILD_VERSION=${{ env.full_version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -85,7 +94,7 @@ jobs:
         if: github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: v${{ env.app_version }}.${{ github.run_number }}
+          RELEASE_TAG: ${{ env.full_version }}
           DATE_TAG: ${{ env.build_date }}-b${{ github.run_number }}
           CUSTOM_TAG: ${{ github.event.inputs.custom_tag }}
         run: |
@@ -100,19 +109,17 @@ jobs:
             CHANGES="- 重新构建并发布镜像 (${SHORT_SHA})"
           fi
           {
-            printf '### Docker 镜像地址\n'
-            printf -- '- 固定版本：`ghcr.io/%s:%s`\n' "${GITHUB_REPOSITORY}" "${RELEASE_TAG}"
-            printf -- '- 日期构建号：`ghcr.io/%s:%s`\n' "${GITHUB_REPOSITORY}" "${DATE_TAG}"
-            printf -- '- 提交哈希：`ghcr.io/%s:sha-%s`\n' "${GITHUB_REPOSITORY}" "${SHORT_SHA}"
-            printf -- '- 最新版：`ghcr.io/%s:latest`\n' "${GITHUB_REPOSITORY}"
-            if [ -n "$CUSTOM_TAG" ]; then
-              printf -- '- 自定义标签：`ghcr.io/%s:%s`\n' "${GITHUB_REPOSITORY}" "${CUSTOM_TAG}"
-            fi
-            printf '\n### 更新内容\n'
-            printf '%s\n' "$CHANGES"
+            echo "## 变更记录${PREV_TAG:+（对比 ${PREV_TAG}）}"
+            echo "${CHANGES}"
+            echo ""
+            echo "## Docker 镜像拉取"
+            echo '```bash'
+            echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${RELEASE_TAG}"
+            echo '```'
+            echo ""
+            echo "**可用标签**：\`${RELEASE_TAG}\`、\`${DATE_TAG}\`${CUSTOM_TAG:+、\`${CUSTOM_TAG}\`}、\`latest\`"
           } > /tmp/release_notes.md
           gh release create "${RELEASE_TAG}" \
             --target "${GITHUB_SHA}" \
             --title "${RELEASE_TAG}" \
-            --notes-file /tmp/release_notes.md \
-            --latest
+            --notes-file /tmp/release_notes.md

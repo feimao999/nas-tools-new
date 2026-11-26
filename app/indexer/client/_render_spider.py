@@ -4,9 +4,15 @@ import time
 from urllib.parse import quote
 
 from pyquery import PyQuery
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as es
-from selenium.webdriver.support.wait import WebDriverWait
+
+try:
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as es
+    from selenium.webdriver.support.wait import WebDriverWait
+except ImportError:
+    By = None
+    es = None
+    WebDriverWait = None
 
 from app.helper import ChromeHelper
 from app.indexer.client._spider import TorrentSpider

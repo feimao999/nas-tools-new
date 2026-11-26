@@ -85,52 +85,7 @@ export class LayoutSearchbar extends CustomElement {
         <div class="d-flex flex-row flex-grow-1 align-items-center py-1">
           <!-- 导航展开按钮 -->
           <layout-navbar-button></layout-navbar-button>
-          <!-- 搜索栏 -->
-          <div class="input-group input-group-flat mx-2">
-            <span class="input-group-text form-control-rounded">
-              <a href="#" class="link-secondary"
-                @click=${ () => {
-                  let source_dict = {
-                    tmdb: "douban",
-                    douban: "person",
-                    person: "tmdb"
-                  };
-                  this._search_source = source_dict[this._search_source];
-                  localStorage.setItem("SearchSource", this._search_source);
-                }}>
-                ${search_source_icon[this._search_source]}
-              </a>
-            </span>
-            <input type="text" class="home_search_bar form-control form-control-rounded" placeholder=${this._search_source === "person" ? "搜索人物" : "搜索电影、电视剧"} autocomplete="new-password" ?readonly=${this.layout_search == 0}
-              @keypress=${ (e) => {
-                if(e.which === 13 && this.input.value){
-                  if (this._search_source === "person") {
-                    navmenu("discovery_person?&type=ALL&title=演员搜索&subtitle=" + this.input.value + "&keyword=" + this.input.value);
-                  } else {
-                    navmenu("recommend?type=SEARCH&title=搜索结果&subtitle=" + this.input.value + "&keyword=" + this.input.value + "&source=" + this._search_source);                   
-                  }
-                  this.input.value = "";
-                }
-              }}>
-            <span class="input-group-text form-control-rounded">
-              <a href="${this.layout_search > 0 ? "javascript:show_search_advanced_modal()":"javascript:void(0)"}" class="link-secondary">
-                <!-- http://tabler-icons.io/i/adjustments -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2"
-                    stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-                  <circle cx="6" cy="10" r="2"></circle>
-                  <line x1="6" y1="4" x2="6" y2="8"></line>
-                  <line x1="6" y1="12" x2="6" y2="20"></line>
-                  <circle cx="12" cy="16" r="2"></circle>
-                  <line x1="12" y1="4" x2="12" y2="14"></line>
-                  <line x1="12" y1="18" x2="12" y2="20"></line>
-                  <circle cx="18" cy="7" r="2"></circle>
-                  <line x1="18" y1="4" x2="18" y2="5"></line>
-                  <line x1="18" y1="9" x2="18" y2="20"></line>
-                </svg>
-              </a>
-            </span>
-          </div>
+          <div class="flex-grow-1"></div>
           <!-- 头像 -->
           <div class="nav-item dropdown me-2">
               <a href="#" class="nav-link d-flex lh-1 text-reset ms-1 p-0" data-bs-toggle="dropdown">

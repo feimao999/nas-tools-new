@@ -2,9 +2,15 @@ import base64
 import time
 
 from lxml import etree
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as es
-from selenium.webdriver.support.wait import WebDriverWait
+
+try:
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as es
+    from selenium.webdriver.support.wait import WebDriverWait
+except ImportError:
+    By = None
+    es = None
+    WebDriverWait = None
 
 import log
 from app.helper import ChromeHelper, ProgressHelper, OcrHelper, SiteHelper

@@ -19,33 +19,11 @@ MENU_CONF = {
         'page': 'index',
         'icon': '\n                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-home" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><polyline points="5 12 3 12 12 3 21 12 19 12"></polyline><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7"></path><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"></path></svg>\n                    '
         },
-    '探索': {
-        'name': '探索',
-        'level': 2,
-        'list': [
-                    {'name': '榜单推荐', 'level': 2, 'page': 'ranking', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-align-box-bottom-center" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"></path>\n                                <path d="M9 15v2"></path>\n                                <path d="M12 11v6"></path>\n                                <path d="M15 13v4"></path>\n                              </svg>\n                            '},
-                    {'name': '豆瓣电影', 'level': 2, 'page': 'douban_movie', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-movie" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"></path>\n                                <path d="M8 4l0 16"></path>\n                                <path d="M16 4l0 16"></path>\n                                <path d="M4 8l4 0"></path>\n                                <path d="M4 16l4 0"></path>\n                                <path d="M4 12l16 0"></path>\n                                <path d="M16 8l4 0"></path>\n                                <path d="M16 16l4 0"></path>\n                              </svg>\n                            '},
-                    {'name': '豆瓣电视剧', 'level': 2, 'page': 'douban_tv', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-device-tv" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"></path>\n                                <path d="M16 3l-4 4l-4 -4"></path>\n                              </svg>\n                            '},
-                    {'name': 'TMDB电影', 'level': 2, 'page': 'tmdb_movie', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-movie" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M4 4m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"></path>\n                                <path d="M8 4l0 16"></path>\n                                <path d="M16 4l0 16"></path>\n                                <path d="M4 8l4 0"></path>\n                                <path d="M4 16l4 0"></path>\n                                <path d="M4 12l16 0"></path>\n                                <path d="M16 8l4 0"></path>\n                                <path d="M16 16l4 0"></path>\n                              </svg>\n                            '},
-                    {'name': 'TMDB电视剧', 'level': 2, 'page': 'tmdb_tv', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-device-tv" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"></path>\n                                <path d="M16 3l-4 4l-4 -4"></path>\n                              </svg>\n                            '},
-                    {'name': 'BANGUMI', 'level': 2, 'page': 'bangumi', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-device-tv-old" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                 <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                 <path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"></path>\n                                 <path d="M16 3l-4 4l-4 -4"></path>\n                                 <path d="M15 7v13"></path>\n                                 <path d="M18 15v.01"></path>\n                                 <path d="M18 12v.01"></path>\n                              </svg>\n                            '}
-        ]
-    },
     '资源搜索': {
         'name': '资源搜索',
         'level': 2,
         'page': 'search',
         'icon': '\n                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-search" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><circle cx="10" cy="10" r="7"></circle><line x1="21" y1="21" x2="15" y2="15"></line></svg>\n                    '
-    },
-    '站点管理': {
-        'name': '站点管理',
-        'level': 2,
-        'list': [
-                    {'name': '站点维护', 'level': 2, 'page': 'site', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-server-2" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"></path><rect x="3" y="4" width="18" height="8" rx="3"></rect><rect x="3" y="12" width="18" height="8" rx="3"></rect><line x1="7" y1="8" x2="7" y2="8.01"></line><line x1="7" y1="16" x2="7" y2="16.01"></line><path d="M11 8h6"></path><path d="M11 16h6"></path></svg>\n                            '},
-                    {'name': '数据统计', 'level': 2, 'page': 'statistics', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-chart-pie" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                 <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                 <path d="M10 3.2a9 9 0 1 0 10.8 10.8a1 1 0 0 0 -1 -1h-6.8a2 2 0 0 1 -2 -2v-7a.9 .9 0 0 0 -1 -.8"></path>\n                                 <path d="M15 3.5a9 9 0 0 1 5.5 5.5h-4.5a1 1 0 0 1 -1 -1v-4.5"></path>\n                              </svg>\n                            '},
-                    {'name': '刷流任务', 'level': 2, 'page': 'brushtask', 'icon': '\n                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-check"list" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M9.615 20h-2.615a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8"></path>\n                                <path d="M14 19l2 2l4 -4"></path>\n                                <path d="M9 8h4"></path>\n                                <path d="M9 12h2"></path>\n                              </svg>\n                            '},
-                    {'name': '站点资源', 'level': 2, 'page': 'sitelist', 'icon': '\n                              <svg xmlns="http: //www.w3.org/2000/svg" class="icon icon-tabler icon-tabler-cloud-computing" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">\n                                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>\n                                <path d="M6.657 16c-2.572 0 -4.657 -2.007 -4.657 -4.483c0 -2.475 2.085 -4.482 4.657 -4.482c.393 -1.762 1.794 -3.2 3.675 -3.773c1.88 -.572 3.956 -.193 5.444 1c1.488 1.19 2.162 3.007 1.77 4.769h.99c1.913 0 3.464 1.56 3.464 3.486c0 1.927 -1.551 3.487 -3.465 3.487h-11.878"></path>\n                                <path d="M12 16v5"></path>\n                                <path d="M16 16v4a1 1 0 0 0 1 1h4"></path>\n                                <path d="M8 16v4a1 1 0 0 1 -1 1h-4"></path>\n                              </svg>\n                            '}
-        ]
     },
     '订阅管理': {
         'name': '订阅管理',
@@ -142,9 +120,9 @@ class ProUser(UserMixin):
             "admin": 1,
             "name": Config().get_config('app').get('login_user'),
             "password": Config().get_config('app').get('login_password')[6:],
-            "pris": "我的媒体库,资源搜索,探索,站点管理,订阅管理,下载管理,媒体整理,服务,系统设置",
+            "pris": "我的媒体库,资源搜索,订阅管理,下载管理,媒体整理,服务,系统设置",
             "level": 2,
-            'search': 1
+            'search': 0
         }]
         user_sites, public_sites, brush_conf = self.__parse_users_sites(Config().get_user_sites_bin_path())
         self._user_sites = user_sites
@@ -184,7 +162,7 @@ class ProUser(UserMixin):
             if not user:
                 continue
             if user.ID == user_id:
-                return ProUser({"id": user.ID, "admin": 0, "name": user.NAME, "password": user.PASSWORD, "pris": user.PRIS, "level": 2, "search": 1})
+                return ProUser({"id": user.ID, "admin": 0, "name": user.NAME, "password": user.PASSWORD, "pris": user.PRIS, "level": 2, "search": 0})
         return None
 
     def get_user(self, user_name):
@@ -196,7 +174,7 @@ class ProUser(UserMixin):
                 return ProUser(user)
         for user in self.dbhelper.get_users():
             if user.NAME == user_name:
-                return ProUser({"id": user.ID, "admin": 0, "name": user.NAME, "password": user.PASSWORD, "pris": user.PRIS, "level": 2, "search": 1})
+                return ProUser({"id": user.ID, "admin": 0, "name": user.NAME, "password": user.PASSWORD, "pris": user.PRIS, "level": 2, "search": 0})
         return None
 
     def get_topmenus(self):
@@ -206,15 +184,19 @@ class ProUser(UserMixin):
         return self.admin_users[0]["pris"].split(",")
 
     def get_usermenus(self, ignore=None):
-        user_pris_list = self.get_pris().split(",")
-        for menu_key, menu_value in MENU_CONF.items():
-            if menu_value.get('page', 'null') in ignore:
-                MENU_CONF.pop(menu_key)
-            for index, page in enumerate(menu_value.get('list', [])):
-                if page['page'] in ignore:
-                    MENU_CONF[menu_key]['list'].pop(index)
-
-        menu_list = list(itemgetter(*user_pris_list)(MENU_CONF))
+        ignore_set = set(ignore or [])
+        user_pris_list = [p for p in (self.get_pris() or "").split(",") if p in MENU_CONF]
+        menu_list = []
+        for menu_key in user_pris_list:
+            menu_value = MENU_CONF[menu_key]
+            if menu_value.get('page', 'null') in ignore_set:
+                continue
+            item = dict(menu_value)
+            if 'list' in item:
+                item['list'] = [p for p in item['list'] if p.get('page') not in ignore_set]
+                if not item['list']:
+                    continue
+            menu_list.append(item)
         return menu_list
 
     def get_services(self):
@@ -276,9 +258,9 @@ class ProUser(UserMixin):
         pass
 
     def __parse_users_sites(self, user_sites_bin_path):
-        if not os.path.exists(user_sites_bin_path):
+        if not user_sites_bin_path or not os.path.exists(user_sites_bin_path):
             log.error(f"【User】用户站点索引文件不存在")
-            return None
+            return {}, [], {}
         try:
             with open(user_sites_bin_path, "rb") as f:
                 base64_encoded_sites = f.read()

@@ -69,18 +69,6 @@ def check_config():
     else:
         log.error("【Config】配置文件格式错误，找不到app配置项！")
 
-    builtin_indexer_path = Config().get_builtin_indexer_path()
-    builtin_indexer_verify_result = StringUtils.verify_integrity(builtin_indexer_path, BuiltinIndexerFileMd5)
-    if not builtin_indexer_verify_result:
-        recovery_msg = """
-------------------------------------------------------------------
-【Config】内置索引文件被改动，为保证稳定性，请检查是否安装第三方插件或者人为修改
-1. 如果为docker容器/套件，请删除容器/套件重新添加
-2. 如果为其他版本，请重新下载
-------------------------------------------------------------------
-        """
-        log.error(recovery_msg)
-
 
 def update_config():
     """
@@ -106,12 +94,7 @@ def update_config():
     try:
         subtitle = Config().get_config('subtitle') or {}
         if subtitle:
-            if subtitle.get("server") == "opensubtitles":
-                PluginManager().save_plugin_config(pid="OpenSubtitles",
-                                                   conf={
-                                                       "enable": subtitle.get("opensubtitles", {}).get("enable")
-                                                   })
-            else:
+            if subtitle.get("server") != "opensubtitles":
                 chinesesubfinder = subtitle.get("chinesesubfinder", {})
                 PluginManager().save_plugin_config(pid="ChineseSubFinder", conf={
                     "host": chinesesubfinder.get("host"),

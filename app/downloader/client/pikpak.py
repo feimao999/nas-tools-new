@@ -1,6 +1,10 @@
 import asyncio
 
-from pikpakapi import PikPakApi, DownloadStatus
+try:
+    from pikpakapi import PikPakApi, DownloadStatus
+except ImportError:
+    PikPakApi = None
+    DownloadStatus = None
 
 import log
 from app.downloader.client._base import _IDownloadClient

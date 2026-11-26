@@ -967,5 +967,83 @@ class TestMediaAIPriorityAndFallback(unittest.TestCase):
             self.assertIn("https://api.github.com/repos/feimao999/nas-tools-new/commits/master", called_urls)
 
 
+class TestV40SlimmingAndCompatibility(unittest.TestCase):
+    def test_version_and_slimmed_manifests(self):
+        import version
+        self.assertEqual(version.APP_VERSION, "v4.0")
+
+        pkg_txt = (ROOT_DIR / "package_list.txt").read_text(encoding="utf-8")
+        for removed in ("chromium-chromedriver", "xvfb", "ffmpeg"):
+            self.assertNotIn(removed, pkg_txt)
+        for kept in ("redis", "fuse3", "inotify-tools", "s6-overlay"):
+            self.assertIn(kept, pkg_txt)
+
+        req_txt = (ROOT_DIR / "requirements.txt").read_text(encoding="utf-8")
+        for removed in ("selenium==", "undetected-chromedriver==", "webdriver-manager==", "PyVirtualDisplay==", "openai==", "srt==", "pikpakapi=="):
+            self.assertNotIn(removed, req_txt)
+        for kept in ("redis==", "qbittorrent-api==", "transmission-rpc==", "requests==", "APScheduler=="):
+            self.assertIn(kept, req_txt)
+
+        dockerfile_txt = (ROOT_DIR / "docker" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("rclone.org/install.sh", dockerfile_txt)
+        self.assertNotIn("dl.min.io", dockerfile_txt)
+
+    def test_chrome_display_cloudflare_stubs(self):
+        from app.helper.chrome_helper import ChromeHelper, init_chrome
+        from app.helper.display_helper import DisplayHelper
+        import app.helper.cloudflare_helper as cf
+
+        ch = ChromeHelper()
+        self.assertFalse(ch.get_status())
+        self.assertIsNone(ch.browser)
+        self.assertFalse(ch.visit("https://example.com"))
+        self.assertIsNone(init_chrome())
+        self.assertFalse(DisplayHelper.can_display())
+        self.assertIsNone(DisplayHelper().get_display())
+        self.assertFalse(cf.resolve_challenge())
+
+    def test_pro_user_menus_strip_discovery_and_site_mgmt_safely(self):
+        import importlib
+        flask_login = types.ModuleType("flask_login")
+        flask_login.UserMixin = object
+        werkzeug_sec = types.ModuleType("werkzeug.security")
+        werkzeug_sec.check_password_hash = lambda a, b: True
+        app_conf = types.ModuleType("app.conf")
+        app_conf.ModuleConf = MagicMock(NETTEST_TARGETS=[])
+        indexer_conf = types.ModuleType("app.indexer.indexerConf")
+        indexer_conf.IndexerConf = MagicMock
+        sys.modules["app.helper"].DbHelper = MagicMock
+        Config.get_config = MagicMock(return_value={"login_user": "admin", "login_password": "[hash]xyz"})
+        Config.get_user_sites_bin_path = MagicMock(return_value="__nonexistent_sites.bin__")
+
+        with patch.dict(
+            sys.modules,
+            {
+                "flask_login": flask_login,
+                "werkzeug.security": werkzeug_sec,
+                "app.conf": app_conf,
+                "app.indexer.indexerConf": indexer_conf,
+            },
+        ):
+            pro_user_mod = importlib.import_module("web.backend.pro_user")
+            self.assertNotIn("探索", pro_user_mod.MENU_CONF)
+            self.assertNotIn("站点管理", pro_user_mod.MENU_CONF)
+            for kept in ("我的媒体库", "资源搜索", "订阅管理", "下载管理", "媒体整理", "服务", "系统设置"):
+                self.assertIn(kept, pro_user_mod.MENU_CONF)
+
+            # 模拟旧数据库子用户仍带有 "探索,站点管理" 权限字段，不应抛 KeyError
+            legacy_user = pro_user_mod.ProUser({
+                "id": 2,
+                "admin": 0,
+                "name": "sub",
+                "password": "xyz",
+                "pris": "我的媒体库,探索,站点管理,订阅管理,媒体整理",
+                "level": 2,
+                "search": 0,
+            })
+            menus = legacy_user.get_usermenus(ignore=[])
+            self.assertEqual([m["name"] for m in menus], ["我的媒体库", "订阅管理", "媒体整理"])
+
+
 if __name__ == "__main__":
     unittest.main()

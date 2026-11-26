@@ -1,7 +1,5 @@
 bash
-chromium-chromedriver
 curl
-ffmpeg
 fuse3
 git
 inotify-tools
@@ -13,6 +11,5 @@ shadow
 sudo
 tzdata
 wget
-xvfb
 yq
 zip

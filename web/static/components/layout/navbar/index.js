@@ -19,7 +19,7 @@ export class LayoutNavbar extends CustomElement {
     super();
     this.navbar_list = [];
     this.layout_gopage = "";
-    this.layout_appversion = "v3.3.0";
+    this.layout_appversion = "v4.0.0";
     this._active_name = "";
     this._update_appversion = "";
     this._update_url = "https://github.com/feimao999/nas-tools-new/releases";
@@ -57,10 +57,6 @@ export class LayoutNavbar extends CustomElement {
         const page = this.navbar_list[0].page ?? this.navbar_list[0].list[0].page
         this._add_page_to_url(page);
         navmenu(page);
-      }
-      // 默认展开探索
-      if (!this._is_expand) {
-        this.show_collapse("ranking");
       }
     }
 

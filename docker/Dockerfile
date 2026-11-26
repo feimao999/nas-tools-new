@@ -1,22 +1,20 @@
 FROM python:3.10.11-alpine
+COPY package_list.txt requirements.txt /tmp/
 RUN apk add --no-cache --virtual .build-deps \
         libffi-dev \
         gcc \
         musl-dev \
         libxml2-dev \
         libxslt-dev \
-    && apk add --no-cache $(echo $(wget --no-check-certificate -qO- https://raw.githubusercontent.com/feimao999/nas-tools-new/master/package_list.txt)) \
+    && apk add --no-cache $(echo $(cat /tmp/package_list.txt)) \
     && curl https://rclone.org/install.sh | bash \
-    && if [ "$(uname -m)" = "x86_64" ]; then ARCH=amd64; elif [ "$(uname -m)" = "aarch64" ]; then ARCH=arm64; fi \
-    && curl https://dl.min.io/client/mc/release/linux-${ARCH}/mc --create-dirs -o /usr/bin/mc \
-    && chmod +x /usr/bin/mc \
     && echo "pip==23.3.2" > /tmp/pip-constraints.txt \
     && echo "setuptools==68.2.2" >> /tmp/pip-constraints.txt \
     && echo "wheel==0.41.2" >> /tmp/pip-constraints.txt \
     && echo "cython==0.29.36" >> /tmp/pip-constraints.txt \
     && export PIP_CONSTRAINT=/tmp/pip-constraints.txt \
     && pip install --upgrade "pip==23.3.2" "setuptools==68.2.2" "wheel==0.41.2" "cython==0.29.36" \
-    && pip install --no-build-isolation -r https://raw.githubusercontent.com/feimao999/nas-tools-new/master/requirements.txt \
+    && pip install --no-build-isolation -r /tmp/requirements.txt \
     && apk del --purge .build-deps \
     && rm -rf /tmp/* /root/.cache /var/cache/apk/*
 ENV S6_SERVICES_GRACETIME=30000 \
@@ -25,7 +23,6 @@ ENV S6_SERVICES_GRACETIME=30000 \
     S6_SYNC_DISKS=1 \
     HOME="/nt" \
     TERM="xterm" \
-    PATH=${PATH}:/usr/lib/chromium \
     LANG="C.UTF-8" \
     TZ="Asia/Shanghai" \
     NASTOOL_CONFIG="/config/config.yaml" \
@@ -59,7 +56,7 @@ RUN mkdir ${HOME} \
     && git config --global pull.ff only \
     && git clone -b master ${REPO_URL} ${WORKDIR} --depth=1 --recurse-submodule \
     && git config --global --add safe.directory ${WORKDIR}
-COPY --chmod=755 ./rootfs /
+COPY --chmod=755 ./docker/rootfs /
 EXPOSE 3000
 VOLUME ["/config"]
 ENTRYPOINT [ "/init" ]
