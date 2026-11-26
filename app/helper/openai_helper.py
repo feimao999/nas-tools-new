@@ -5,6 +5,11 @@ from urllib.parse import urlparse
 
 import requests
 
+try:
+    import log
+except ImportError:
+    log = None
+
 from app.utils import OpenAISessionCache
 from app.utils.commons import singleton
 from config import Config
@@ -539,24 +544,32 @@ class OpenAiHelper:
 
     def get_media_name(self, filename):
         """
-        从文件名中提取媒体名称等要素
-        :param filename: 文件名
-        :return: Json
+        从文件名或种子名中提取媒体名称等要素
+        :param filename: 文件名或种子名（可附带副标题）
+        :return: Json dict | None
         """
         if not self.get_state():
             return None
         result = ""
         try:
             _filename_prompt = (
-                "I will give you a movie/tvshow file name. You need to return a Json.\n"
-                "Pay attention to the correct identification of the film name.\n"
-                "Return ONLY a valid JSON object without markdown formatting or explanation.\n"
-                '{"title":string,"version":string,"part":string,"year":string,"resolution":string,"season":number|null,"episode":number|null}'
+                "You are a media filename parser. Extract clean movie/TV metadata from the given filename or torrent title.\n"
+                "Rules:\n"
+                "1. Strip release groups, subtitle groups, codecs, sources, and episode titles from title.\n"
+                "2. Prefer Chinese title in 'title' if present; put English/original title in 'en_title' if also present.\n"
+                "3. Set 'type' to 'tv' if episodic/series/anime season, or 'movie' if a film.\n"
+                "4. Return ONLY a valid JSON object without markdown formatting or explanation:\n"
+                '{"title":string,"en_title":string,"type":"movie"|"tv"|null,"version":string,"part":string,"year":string,"resolution":string,"season":number|null,"episode":number|null}'
             )
             result = self.__get_model(prompt=_filename_prompt, message=filename, json_mode=True)
             return self._extract_json(result)
+        except _AIRateLimitError as e:
+            msg = f"【AI】接口达到频率或额度上限，跳过本次AI识别：{str(e)}"
+            log.warn(msg) if log else print(msg)
+            return {}
         except Exception as e:
-            print(f"{str(e)}：{result}")
+            msg = f"【AI】解析媒体名称失败（{str(e)}）：{result}"
+            log.warn(msg) if log else print(msg)
             return {}
 
     def get_answer(self, text, userid):

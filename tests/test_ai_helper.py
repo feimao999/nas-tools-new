@@ -52,19 +52,45 @@ def _ensure_stub_dependencies():
 
     class _StubConfig:
         openai_cfg = {}
+        laboratory_cfg = {}
+        app_cfg = {"rmt_tmdbkey": "tmdb-key", "rmt_match_mode": "normal"}
+        media_cfg = {"tmdb_language": "zh"}
         proxies = {"https": "http://127.0.0.1:7890"}
 
         def get_config(self, node=None):
             if node == "openai":
                 return dict(self.openai_cfg)
+            if node == "laboratory":
+                return dict(self.laboratory_cfg)
+            if node == "app":
+                return dict(self.app_cfg)
+            if node == "media":
+                return dict(self.media_cfg)
             return {}
 
         def get_proxies(self):
             return self.proxies
 
+        def get_tmdbapi_url(self):
+            return "api.tmdb.org"
+
+    if "log" not in sys.modules:
+        log_mod = types.ModuleType("log")
+        log_mod.info = lambda *a, **k: None
+        log_mod.warn = lambda *a, **k: None
+        log_mod.error = lambda *a, **k: None
+        log_mod.debug = lambda *a, **k: None
+        sys.modules["log"] = log_mod
+
     if "config" not in sys.modules:
         config_mod = types.ModuleType("config")
         config_mod.Config = _StubConfig
+        config_mod.KEYWORD_BLACKLIST = []
+        config_mod.KEYWORD_SEARCH_WEIGHT_3 = 3
+        config_mod.KEYWORD_SEARCH_WEIGHT_2 = 2
+        config_mod.KEYWORD_SEARCH_WEIGHT_1 = 1
+        config_mod.KEYWORD_STR_SIMILARITY_THRESHOLD = 0.5
+        config_mod.KEYWORD_DIFF_SCORE_THRESHOLD = 0.5
         sys.modules["config"] = config_mod
 
     if "app" not in sys.modules:
@@ -413,6 +439,189 @@ class TestOpenAiHelperMultiAI(unittest.TestCase):
         with patch.object(requests, "post", return_value=_make_response(200, qa_reply)):
             ans = self.helper.get_question_answer("1+1=? 1:1 2:2")
             self.assertEqual(ans, "2")
+
+
+def _load_media_class():
+    from enum import Enum
+
+    class MediaType(Enum):
+        MOVIE = "电影"
+        TV = "电视剧"
+        ANIME = "动漫"
+
+    class MatchMode(Enum):
+        NORMAL = "normal"
+        STRICT = "strict"
+
+    class _DummyMetaInfo:
+        def __init__(self, title, subtitle=None, mtype=None, filePath=None, **kwargs):
+            self.org_string = title
+            self.subtitle = subtitle
+            self._name = "WrongRegexTitle" if "MessyGroup" in (title or "") else (title or "")
+            self.year = None
+            self.type = mtype or MediaType.TV
+            self.begin_season = None
+            self.end_season = None
+            self.begin_episode = None
+            self.end_episode = None
+            self.tmdb_info = None
+
+        def get_name(self):
+            return self._name
+
+        def get_season_string(self):
+            return f"S{self.begin_season:02d}" if self.begin_season else "S01"
+
+        def get_episode_string(self):
+            return f"E{self.begin_episode:02d}" if self.begin_episode else ""
+
+        def set_season(self, sea):
+            if sea is not None and str(sea).isdigit():
+                self.begin_season = int(sea)
+
+        def set_episode(self, ep):
+            if ep is not None and str(ep).isdigit():
+                self.begin_episode = int(ep)
+
+        def set_tmdb_info(self, info):
+            self.tmdb_info = info
+
+    class _DummyMetaHelper:
+        def __init__(self):
+            self.store = {}
+
+        def get_meta_data_by_key(self, key):
+            return self.store.get(key) or {}
+
+        def update_meta_data(self, mapping):
+            self.store.update(mapping)
+
+    if "zhconv" not in sys.modules:
+        zh = types.ModuleType("zhconv")
+        zh.convert = lambda s, _: s
+        sys.modules["zhconv"] = zh
+
+    if "lxml" not in sys.modules:
+        lxml_mod = types.ModuleType("lxml")
+        lxml_mod.etree = MagicMock()
+        sys.modules["lxml"] = lxml_mod
+
+    sys.modules["app.helper"].MetaHelper = _DummyMetaHelper
+
+    if "app.media" not in sys.modules:
+        media_pkg = types.ModuleType("app.media")
+        media_pkg.__path__ = [str(ROOT_DIR / "app" / "media")]
+        sys.modules["app.media"] = media_pkg
+
+    metainfo_mod = types.ModuleType("app.media.meta.metainfo")
+    metainfo_mod.MetaInfo = _DummyMetaInfo
+    sys.modules["app.media.meta"] = types.ModuleType("app.media.meta")
+    sys.modules["app.media.meta.metainfo"] = metainfo_mod
+
+    tmdb_mod = types.ModuleType("app.media.tmdbv3api")
+    for cls_name in ("TMDb", "Search", "Movie", "TV", "Person", "Find", "Discover", "Trending", "Episode", "Genre"):
+        setattr(tmdb_mod, cls_name, MagicMock)
+    tmdb_mod.TMDbException = Exception
+    sys.modules["app.media.tmdbv3api"] = tmdb_mod
+
+    utils_mod = sys.modules["app.utils"]
+    for attr in ("PathUtils", "EpisodeFormat", "RequestUtils", "NumberUtils", "StringUtils"):
+        setattr(utils_mod, attr, MagicMock())
+    utils_mod.StringUtils.xstr = lambda v: "" if v is None else str(v)
+    utils_mod.cacheman = {"tmdb_supply": {}}
+
+    types_mod = types.ModuleType("app.utils.types")
+    types_mod.MediaType = MediaType
+    types_mod.MatchMode = MatchMode
+    sys.modules["app.utils.types"] = types_mod
+
+    from app.media.media import Media
+    return Media, MediaType
+
+
+class TestMediaAIPriorityAndFallback(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.Media, cls.MediaType = _load_media_class()
+
+    def setUp(self):
+        self.Media._ai_mem_cache.clear()
+        Config.laboratory_cfg = {"chatgpt_enable": True}
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-test",
+            "model": "gemini-2.5-flash",
+            "ai_priority": False,
+        }
+        self.media = self.Media()
+
+        def fake_search_tmdb(file_media_name, search_type, first_media_year=None, media_year=None, season_number=None):
+            if file_media_name == "WrongRegexTitle":
+                return {"id": 999, "name": "错误匹配的剧集", "media_type": self.MediaType.TV, "genres": [1]}
+            if file_media_name == "幕府将军":
+                return {"id": 126308, "name": "幕府将军", "media_type": self.MediaType.TV, "genres": [1]}
+            return {}
+
+        self.media._Media__search_tmdb = MagicMock(side_effect=fake_search_tmdb)
+        self.media._Media__search_multi_tmdb = MagicMock(return_value={})
+        self.media.get_tmdb_info = MagicMock(
+            side_effect=lambda mtype, tmdbid, **kw: {"id": tmdbid, "name": "幕府将军" if tmdbid == 126308 else "错误匹配的剧集", "media_type": mtype, "genres": [1]}
+        )
+
+    def test_default_mode_uses_tmdb_first_even_when_wrong(self):
+        Config.openai_cfg["ai_priority"] = False
+        with patch.object(requests, "post") as mock_post:
+            info = self.media.get_media_info("[MessyGroup] Shogun S02E03 2160p", subtitle="幕府将军 第二季 第3集")
+            self.assertEqual(info.tmdb_info["id"], 999)
+            mock_post.assert_not_called()
+
+    def test_ai_priority_runs_ai_first_and_fixes_title_and_season(self):
+        Config.openai_cfg["ai_priority"] = True
+        gemini_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"幕府将军","en_title":"Shogun","type":"tv","version":"","part":"","year":"2024","resolution":"2160p","season":2,"episode":3}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        with patch.object(requests, "post", return_value=_make_response(200, gemini_reply)) as mock_post:
+            info = self.media.get_media_info("[MessyGroup] Shogun S02E03 2160p", subtitle="幕府将军 第二季 第3集")
+            self.assertEqual(info.tmdb_info["id"], 126308)
+            self.assertEqual(info.begin_season, 2)
+            self.assertEqual(info.begin_episode, 3)
+            mock_post.assert_called_once()
+
+    def test_ai_priority_falls_back_to_tmdb_on_rate_limit_and_recovers_later(self):
+        Config.openai_cfg["ai_priority"] = True
+        # 第一次：AI 触发 429 配额上限 -> 自动回退常规 TMDB（不会把失败结果锁死在缓存中）
+        with patch.object(requests, "post", return_value=_make_response(429, text="quota exceeded")):
+            fallback_info = self.media.get_media_info("[MessyGroup] Shogun S02E03 2160p", cache=False)
+            self.assertEqual(fallback_info.tmdb_info["id"], 999)
+
+        # 第二次：配额恢复 -> 再次优先走 AI 并拿到正确结果
+        gemini_reply = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": '{"title":"幕府将军","en_title":"Shogun","type":"tv","version":"","part":"","year":"2024","resolution":"2160p","season":2,"episode":3}'
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        with patch.object(requests, "post", return_value=_make_response(200, gemini_reply)):
+            recovered_info = self.media.get_media_info("[MessyGroup] Shogun S02E03 2160p", cache=False)
+            self.assertEqual(recovered_info.tmdb_info["id"], 126308)
+            self.assertEqual(recovered_info.begin_season, 2)
 
 
 if __name__ == "__main__":

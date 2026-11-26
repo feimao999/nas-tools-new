@@ -270,53 +270,6 @@
                          id="app.tmdb_image_url" placeholder="https://image.tmdb.org" autocomplete="off">
                 </div>
               </div>
-              <div class="col-lg">
-                <div class="mb-3">
-                  <label class="form-label">AI 服务商 <span class="form-help"
-                                                                        title="选择用于媒体增强识别、字幕翻译与问答的AI服务商：OpenAI、Anthropic Claude、Google Gemini 或 本地/第三方兼容接口（Ollama、LM Studio、DeepSeek、One-API 等）；第三方 OpenAI 兼容接口也可直接选 OpenAI 并填写自定义 API Url"
-                                                                        data-bs-toggle="tooltip">?</span></label>
-                  <select class="form-select" id="openai.provider">
-                    <option value="openai" {% if not Config.openai or not Config.openai.provider or Config.openai.provider=='openai' %}selected{% endif %}>OpenAI</option>
-                    <option value="claude" {% if Config.openai and Config.openai.provider=='claude' %}selected{% endif %}>Anthropic Claude</option>
-                    <option value="gemini" {% if Config.openai and Config.openai.provider=='gemini' %}selected{% endif %}>Google Gemini</option>
-                    <option value="local" {% if Config.openai and Config.openai.provider=='local' %}selected{% endif %}>本地 AI / OpenAI 兼容接口 (Ollama、LM Studio、DeepSeek、One-API 等)</option>
-                  </select>
-                </div>
-              </div>
-              <div class="col-lg">
-                <div class="mb-3">
-                  <label class="form-label">AI API Url <span class="form-help"
-                                                                        title="默认官方地址：OpenAI 为 https://api.openai.com；Claude 为 https://api.anthropic.com；Gemini 为 https://generativelanguage.googleapis.com；本地 Ollama 通常为 http://127.0.0.1:11434/v1。使用官方服务留空即可，使用本地 AI 时请务必填写"
-                                                                        data-bs-toggle="tooltip">?</span></label>
-                  <input type="text" value="{% if Config.openai %}{{ Config.openai.api_url or '' }}{% endif %}" class="form-control"
-                         id="openai.api_url" placeholder="https://api.openai.com" autocomplete="off">
-                </div>
-              </div>
-              <div class="col-lg">
-                <div class="mb-3">
-                  <label class="form-label">AI API Key <span class="form-help"
-                                                                        title="填入对应服务商的 API Key（OpenAI、Claude、Gemini、DeepSeek 等）；填写后离开输入框将自动拉取可用模型列表；本地 AI 可留空"
-                                                                        data-bs-toggle="tooltip">?</span></label>
-                  <input type="text" value="{% if Config.openai %}{{ Config.openai.api_key or '' }}{% endif %}" class="form-control"
-                         id="openai.api_key" placeholder="sk-..." autocomplete="off">
-                </div>
-              </div>
-              <div class="col-lg">
-                <div class="mb-3">
-                  <label class="form-label">AI 模型 <span class="form-help"
-                                                                        title="填写 API Key（本地 AI 填 API Url）后会自动从服务商获取可用模型列表，直接选择即可，也可点击右侧「获取模型」手动刷新"
-                                                                        data-bs-toggle="tooltip">?</span></label>
-                  <div class="input-group">
-                    <select class="form-select" id="openai.model">
-                      {% if Config.openai and Config.openai.model %}
-                      <option value="{{ Config.openai.model }}" selected>{{ Config.openai.model }}</option>
-                      {% endif %}
-                    </select>
-                    <button type="button" class="btn" id="ai_model_refresh_btn" onclick="refresh_ai_models(true)">获取模型</button>
-                  </div>
-                  <small class="form-hint" id="ai_model_hint"></small>
-                </div>
-              </div>
             </div>
             <div class="row">
               <div class="col-lg">
@@ -512,6 +465,102 @@
                 </div>
             </div>
       </div>
+      </div>
+      <div class="col-md-12">
+        <div class="card" id="basic_ai">
+          <div class="card-header">
+            <h3 class="card-title"><strong>AI</strong></h3>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-label">AI 服务商 <span class="form-help"
+                                                            title="选择用于媒体识别、字幕翻译与问答的AI服务商：OpenAI、Anthropic Claude、Google Gemini 或 本地/第三方兼容接口（Ollama、LM Studio、DeepSeek、One-API 等）；第三方 OpenAI 兼容接口也可直接选 OpenAI 并填写自定义 API Url"
+                                                            data-bs-toggle="tooltip">?</span></label>
+                  <select class="form-select" id="openai.provider">
+                    <option value="openai" {% if not Config.openai or not Config.openai.provider or Config.openai.provider=='openai' %}selected{% endif %}>OpenAI</option>
+                    <option value="claude" {% if Config.openai and Config.openai.provider=='claude' %}selected{% endif %}>Anthropic Claude</option>
+                    <option value="gemini" {% if Config.openai and Config.openai.provider=='gemini' %}selected{% endif %}>Google Gemini</option>
+                    <option value="local" {% if Config.openai and Config.openai.provider=='local' %}selected{% endif %}>本地 AI / OpenAI 兼容接口 (Ollama、LM Studio、DeepSeek、One-API 等)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-label">AI API Url <span class="form-help"
+                                                             title="默认官方地址：OpenAI 为 https://api.openai.com；Claude 为 https://api.anthropic.com；Gemini 为 https://generativelanguage.googleapis.com；本地 Ollama 通常为 http://127.0.0.1:11434/v1。使用官方服务留空即可，使用本地 AI 时请务必填写"
+                                                             data-bs-toggle="tooltip">?</span></label>
+                  <input type="text" value="{% if Config.openai %}{{ Config.openai.api_url or '' }}{% endif %}" class="form-control"
+                         id="openai.api_url" placeholder="https://api.openai.com" autocomplete="off">
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-label">AI API Key <span class="form-help"
+                                                             title="填入对应服务商的 API Key（OpenAI、Claude、Gemini、DeepSeek 等）；填写后离开输入框将自动拉取可用模型列表；本地 AI 可留空"
+                                                             data-bs-toggle="tooltip">?</span></label>
+                  <input type="text" value="{% if Config.openai %}{{ Config.openai.api_key or '' }}{% endif %}" class="form-control"
+                         id="openai.api_key" placeholder="sk-..." autocomplete="off">
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-label">AI 模型 <span class="form-help"
+                                                          title="填写 API Key（本地 AI 填 API Url）后会自动从服务商获取可用模型列表，直接选择即可，也可点击右侧「获取模型」手动刷新"
+                                                          data-bs-toggle="tooltip">?</span></label>
+                  <div class="input-group">
+                    <select class="form-select" id="openai.model">
+                      {% if Config.openai and Config.openai.model %}
+                      <option value="{{ Config.openai.model }}" selected>{{ Config.openai.model }}</option>
+                      {% endif %}
+                    </select>
+                    <button type="button" class="btn" id="ai_model_refresh_btn" onclick="refresh_ai_models(true)">获取模型</button>
+                  </div>
+                  <small class="form-hint" id="ai_model_hint"></small>
+                </div>
+              </div>
+            </div>
+            <div class="row mt-1">
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="laboratory.chatgpt_enable" {% if
+                      (Config.laboratory and Config.laboratory.chatgpt_enable) or (Config.openai and Config.openai.ai_priority) %}checked{% endif %}>
+                    <span class="form-check-label">启用 AI 辅助识别 <span class="form-help"
+                                                                          title="开启后启用 AI 识别文件名与种子名。若未同时开启「优先使用 AI 识别」，则仅在常规 TMDB 识别不到结果时使用 AI 兜底"
+                                                                          data-bs-toggle="tooltip">?</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="mb-3">
+                  <label class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="openai.ai_priority" {% if
+                      Config.openai and Config.openai.ai_priority %}checked{% endif %}>
+                    <span class="form-check-label">优先使用 AI 识别 <span class="form-help"
+                                                                          title="开启后每次识别优先使用 AI 提取片名、年份、季集再去匹配 TMDB，避免常规规则把名称识别错；当 AI 调用失败（如达到 API 使用上限、网络超时）或未匹配到结果时，自动回退为常规 TMDB 识别"
+                                                                          data-bs-toggle="tooltip">?</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="row align-items-center">
+              <div class="col"></div>
+              <div class="col-auto">
+                <a id="basic_ai_btn" href="javascript:save_basic_config('basic_ai')" class="btn btn-primary">
+                  保存
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="col-md-12">
         <div class="card" id="basic_service">
@@ -784,18 +833,6 @@
                     <span class="form-check-label">WEB增强识别 <span class="form-help"
                                                                      title="开启后，通过TMDB的API无法识别到媒体信息时，会尝试通过themoviedb.org网站再次搜索匹配，仅个别极端情况下有效，会大大增加识别耗时，一般情况下不建议开启"
                                                                      data-bs-toggle="tooltip">?</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
-              <div class="col-12 col-xl-3">
-                <div class="mb-3">
-                  <label class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="laboratory.chatgpt_enable" {% if
-                      Config.laboratory and Config.laboratory.chatgpt_enable %}checked{% endif %}>
-                    <span class="form-check-label">AI增强识别 <span class="form-help"
-                                                                  title="开启后，通过TMDB的API无法识别到媒体信息时，使用配置的AI（OpenAI、Claude、Gemini或本地AI）识别匹配"
-                                                                  data-bs-toggle="tooltip">?</span>
                     </span>
                   </label>
                 </div>
@@ -1412,6 +1449,16 @@
   });
   $("#openai\\.api_url").on("change", function () {
     refresh_ai_models(false);
+  });
+  $("#openai\\.ai_priority").on("change", function () {
+    if ($(this).prop("checked")) {
+      $("#laboratory\\.chatgpt_enable").prop("checked", true);
+    }
+  });
+  $("#laboratory\\.chatgpt_enable").on("change", function () {
+    if (!$(this).prop("checked")) {
+      $("#openai\\.ai_priority").prop("checked", false);
+    }
   });
 
   update_ai_placeholders();
