@@ -1063,10 +1063,21 @@ class TestTavilyFallbackAndGeminiSafety(unittest.TestCase):
         q = OpenAiHelper._build_tavily_query(
             "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip][HEVC-10bit][JPN][FLACx3].mkv"
         )
-        self.assertEqual(q, "Detective Conan Movie 29 Fallen Angel of the Highway TMDB")
+        self.assertEqual(q, "Detective Conan Movie 29 Fallen Angel of the Highway 中文 译名 TMDB")
 
         q_ep = OpenAiHelper._build_tavily_query("[LoliHouse] Sousou no Frieren - 05 [WebRip 1080p HEVC-10bit AAC].mkv")
-        self.assertEqual(q_ep, "Sousou no Frieren TMDB")
+        self.assertEqual(q_ep, "Sousou no Frieren 中文 译名 TMDB")
+
+        q_vcb1 = OpenAiHelper._build_tavily_query("[VCB-Studio] Aru Majo ga Shinu Made [09][Ma10p_1080p][x265_flac].mkv")
+        q_vcb2 = OpenAiHelper._build_tavily_query("[VCB-Studio] Aru Majo ga Shinu Made [11][Ma10p_1080p][x265_flac].mkv")
+        self.assertEqual(q_vcb1, "Aru Majo ga Shinu Made 中文 译名 TMDB")
+        self.assertEqual(q_vcb2, "Aru Majo ga Shinu Made 中文 译名 TMDB")
+
+        q_folder = OpenAiHelper._build_tavily_query("[VCB-Studio] Kowloon Generic Romance [Ma10p_1080p]/[VCB-Studio] Kowloon Generic Romance")
+        self.assertEqual(q_folder, "Kowloon Generic Romance 中文 译名 TMDB")
+
+        q_cn = OpenAiHelper._build_tavily_query("[ANi] 直至魔女消逝 - 09 [1080P][Baha][WEB-DL].mp4")
+        self.assertEqual(q_cn, "直至魔女消逝 TMDB")
 
     def test_gemini_safety_settings_and_native_fallback_to_tavily(self):
         Config.openai_cfg = {

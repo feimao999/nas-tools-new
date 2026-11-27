@@ -581,45 +581,59 @@ class OpenAiHelper:
     @classmethod
     def _build_tavily_query(cls, raw_input):
         """
-        将复杂媒体文件名/种子名清洗为适合 Tavily 检索的精简关键词
+        将复杂媒体文件名/种子名清洗为优先命中中文官方译名的 Tavily 检索词
         """
         lines = [ln.strip() for ln in str(raw_input or "").splitlines() if ln.strip()]
         if not lines:
             return ""
-        primary = lines[0]
-        # 去除常见视频后缀
-        primary = re.sub(r"\.(mkv|mp4|avi|ts|m2ts|iso|rmvb|flv|webm|mov|wmv)$", "", primary, flags=re.IGNORECASE)
-        # 去除 8 位 CRC32 校验码，如 [A1B2C3D4]
-        primary = re.sub(r"\[[0-9A-Fa-f]{8}\]", " ", primary)
-        # 将括号与常见分隔符替换为空格（保留括号内的片名本身，如 [Detective Conan Movie 29 ...]）
-        primary = re.sub(r"[\[\]()【】（）_]+", " ", primary)
-        primary = re.sub(r"(?<=\w)\.(?=\w)", " ", primary)
-        # 剥离压制组、分辨率、编码、音轨、语言标签与纯单集号
-        noise_pattern = (
-            r"\b(?:"
-            r"4K|8K|2160p|1080p|1080i|720p|576p|480p|UHD|FHD|"
-            r"BDRip|BDMV|BluRay|Blu-ray|WEB-DL|WEBRip|HDTV|DVDRip|REMUX|BDRemux|"
-            r"HEVC|AVC|H\.?265|H\.?264|x265|x264|AV1|10bit|8bit|Hi10P|"
-            r"HDR10\+?|HDR|DoVi|DV|SDR|"
-            r"FLAC(?:x\d+)?|AAC(?:x\d+)?|AC3|EAC3|DDP[\d.]*|DTS(?:-HD)?|TrueHD|Atmos|LPCM|MP3|"
-            r"JPN|JAP|CHS|CHT|JPSC|JPTC|BIG5|GB|ENG|CHI|KOR|60fps|24fps|"
-            r"DBD-Raws|VCB-Studio|LoliHouse|Lilith-Raws|Sakurato|ANi|Baha|B-Global|Nekomoe\s+kissaten|"
-            r"S\d{1,2}E\d{1,3}|EP?\d{1,3}|v\d"
-            r")\b"
-        )
-        cleaned = re.sub(noise_pattern, " ", primary, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -._/")
-        # 仅剥离末尾形如 "- 05" 或前导零集号 " 05"，保留 Movie 29 / Part 2 / 300 等片名数字
-        cleaned = re.sub(r"(?:\s*-\s*\d{1,3}|\s+0\d{1,2})$", "", cleaned).strip(" -._/")
-        if not cleaned:
+
+        def _clean_segment(seg):
+            seg = re.sub(r"\.(mkv|mp4|avi|ts|m2ts|iso|rmvb|flv|webm|mov|wmv)$", "", seg, flags=re.IGNORECASE)
+            # 先剥离方括号内的纯 CRC32 校验码与纯集数块（如 [09]、[11v2]、[A1B2C3D4]），保留含片名的方括号
+            seg = re.sub(r"\[(?:[0-9A-Fa-f]{8}|\d{1,3}(?:v\d)?)\]", " ", seg, flags=re.IGNORECASE)
+            seg = re.sub(r"[\[\]()【】（）_]+", " ", seg)
+            seg = re.sub(r"(?<=\w)\.(?=\w)", " ", seg)
+            noise_pattern = (
+                r"\b(?:"
+                r"4K|8K|2160p|1080p|1080i|720p|576p|480p|UHD|FHD|"
+                r"BDRip|BDMV|BluRay|Blu-ray|WEB-DL|WEBRip|HDTV|DVDRip|REMUX|BDRemux|"
+                r"HEVC|AVC|H\.?265|H\.?264|x265|x264|AV1|10bit|8bit|Hi10P|Hi444\w*|Ma10p|Ma444\w*|yuv\w*|"
+                r"HDR10\+?|HDR|DoVi|DV|SDR|"
+                r"FLAC(?:x\d+)?|AAC(?:x\d+)?|AC3|EAC3|DDP[\d.]*|DTS(?:-HD)?|TrueHD|Atmos|LPCM|MP3|"
+                r"JPN|JAP|CHS|CHT|JPSC|JPTC|BIG5|GB|ENG|CHI|KOR|60fps|24fps|"
+                r"DBD-Raws|VCB-Studio|LoliHouse|Lilith-Raws|Sakurato|ANi|Baha|B-Global|Nekomoe\s+kissaten|"
+                r"S\d{1,2}E\d{1,3}|EP?\d{1,3}|v\d"
+                r")\b"
+            )
+            seg = re.sub(noise_pattern, " ", seg, flags=re.IGNORECASE)
+            seg = re.sub(r"\s+", " ", seg).strip(" -._/")
+            seg = re.sub(r"(?:\s*-\s*\d{1,3}|\s+0\d{1,2})$", "", seg).strip(" -._/")
+            return seg
+
+        parts = [p.strip() for p in re.split(r"[\\/]+", lines[0]) if p.strip()]
+        cleaned_parts = [_clean_segment(p) for p in parts]
+        cleaned_parts = [p for p in cleaned_parts if p and not p.isdigit()]
+        if len(cleaned_parts) >= 2 and (
+            cleaned_parts[-1].lower() == cleaned_parts[-2].lower()
+            or cleaned_parts[-1].lower() in cleaned_parts[-2].lower()
+        ):
+            cleaned = cleaned_parts[-2]
+        elif cleaned_parts:
+            cleaned = cleaned_parts[-1]
+        else:
             cleaned = lines[0][:100].strip()
+
         # 若附带了副标题描述行，补充前 40 字符辅助定位中文译名
         if len(lines) > 1:
             sub = re.sub(r"^(?:Subtitle|Torrent description|副标题)[:：\s]*", "", lines[1], flags=re.IGNORECASE).strip()
             if sub and sub not in cleaned:
                 cleaned = f"{cleaned} {sub[:40]}".strip()
-        cleaned = cleaned[:120].strip()
-        if "tmdb" not in cleaned.lower():
+
+        cleaned = cleaned[:110].strip()
+        has_chinese = bool(re.search(r"[\u4e00-\u9fff]", cleaned))
+        if not has_chinese:
+            cleaned = f"{cleaned} 中文 译名 TMDB"
+        elif "tmdb" not in cleaned.lower():
             cleaned = f"{cleaned} TMDB"
         return cleaned
 
@@ -632,8 +646,12 @@ class OpenAiHelper:
             return ""
         cached = self._tavily_cache.get(query)
         if cached is not None:
+            if log:
+                log.debug(f"【AI】Tavily 命中查询缓存：{query}")
             return cached
 
+        if log:
+            log.debug(f"【AI】正在调用 Tavily 搜索：{query}")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self._tavily_api_key}",
@@ -787,7 +805,7 @@ class OpenAiHelper:
                 f"{search_hint}"
                 "Rules:\n"
                 "1. Strip release/fansub groups ([DBD-Raws], [VCB-Studio], etc.), resolutions, codecs, audio tags, and non-official sequel numbering like 'Movie 29', 'M29', 'The Movie 29', '剧场版29' that TMDB does NOT include in official titles.\n"
-                "2. Put official Chinese title in 'title' ONLY if known with high confidence; otherwise put the clean title from the filename (do NOT guess fake translations).\n"
+                "2. Prefer the official Chinese title found in web search results (e.g. '直至魔女消逝') for 'title'; ONLY put a Chinese title in 'title' if confirmed in web search results or known with high confidence, otherwise put the clean original/English title from the filename (NEVER invent literal word-for-word translations).\n"
                 "3. Put official original-language title (e.g. Japanese '名探偵コナン ハイウェイの堕天使') in 'original_title' if known, else ''.\n"
                 "4. Put clean English title (without 'Movie XX' numbering, e.g. 'Detective Conan: Fallen Angel of the Highway') in 'en_title' if present/known, else ''.\n"
                 "5. Put 2 to 4 TMDB search queries in 'search_keywords' ordered from specific to broad: MUST include standalone distinctive subtitles (e.g. 'Fallen Angel of the Highway') and localized franchise aliases (e.g. 'Case Closed: Fallen Angel of the Highway') when applicable.\n"
