@@ -1005,6 +1005,8 @@ class TestV40SlimmingAndCompatibility(unittest.TestCase):
         self.assertFalse(DisplayHelper.can_display())
         self.assertIsNone(DisplayHelper().get_display())
         self.assertFalse(cf.resolve_challenge())
+        self.assertFalse(cf.under_challenge(""))
+        self.assertFalse(cf.under_challenge("<html><head><title>Normal</title></head></html>"))
 
     def test_pro_user_menus_strip_discovery_and_site_mgmt_safely(self):
         import importlib

@@ -17,6 +17,11 @@ INFO "以PUID=${PUID}，PGID=${PGID}的身份启动程序..."
 groupmod -o -g "$PGID" nt
 usermod -o -u "$PUID" nt
 
-# 创建目录、权限设置
+# 创建目录、权限设置（当 /config 属主未变时跳过深层缓存目录全量遍历，避免大量缓存文件导致启动卡数分钟）
 mkdir -p /config "${HOME}" "${WORKDIR}"
-chown -R nt:nt "${WORKDIR}" "${HOME}" /config /etc/hosts
+chown -R nt:nt "${WORKDIR}" "${HOME}" /etc/hosts
+if [ "$(stat -c '%u:%g' /config 2>/dev/null)" != "${PUID}:${PGID}" ]; then
+    chown -R nt:nt /config
+else
+    chown nt:nt /config /config/* 2>/dev/null || true
+fi
