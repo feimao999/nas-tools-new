@@ -988,6 +988,10 @@ class TestV40SlimmingAndCompatibility(unittest.TestCase):
         self.assertIn("rclone.org/install.sh", dockerfile_txt)
         self.assertNotIn("dl.min.io", dockerfile_txt)
 
+        fixuser_txt = (ROOT_DIR / "docker" / "rootfs" / "etc" / "s6-overlay" / "s6-rc.d" / "init-020-fixuser" / "run").read_text(encoding="utf-8")
+        self.assertNotIn("/usr/lib/chromium", fixuser_txt)
+        self.assertNotIn("/usr/bin/chromedriver", fixuser_txt)
+
     def test_chrome_display_cloudflare_stubs(self):
         from app.helper.chrome_helper import ChromeHelper, init_chrome
         from app.helper.display_helper import DisplayHelper

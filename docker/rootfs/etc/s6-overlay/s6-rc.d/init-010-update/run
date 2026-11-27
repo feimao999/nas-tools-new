@@ -104,12 +104,12 @@ function requirements_update {
         if [ "${NASTOOL_CN_UPDATE}" = "true" ]; then
             package_cn
             apk add --no-cache libffi-dev gcc musl-dev libxml2-dev libxslt-dev
-            pip install --upgrade pip setuptools wheel -i "${PYPI_MIRROR}"
-            pip install -r requirements.txt -i "${PYPI_MIRROR}"
+            pip install --upgrade "pip==23.3.2" "setuptools==68.2.2" "wheel==0.41.2" "cython==0.29.36" -i "${PYPI_MIRROR}"
+            pip install --no-build-isolation -r requirements.txt -i "${PYPI_MIRROR}"
         else
             apk add --no-cache libffi-dev gcc musl-dev libxml2-dev libxslt-dev
-            pip install --upgrade pip setuptools wheel
-            pip install -r requirements.txt
+            pip install --upgrade "pip==23.3.2" "setuptools==68.2.2" "wheel==0.41.2" "cython==0.29.36"
+            pip install --no-build-isolation -r requirements.txt
         fi
         if [ $? -ne 0 ]; then
             ERROR "无法安装依赖，请更新镜像！"
