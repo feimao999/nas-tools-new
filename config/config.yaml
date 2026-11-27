@@ -176,8 +176,12 @@ openai:
   model: gpt-4o-mini
   # 【优先使用 AI 识别】：开启后优先通过 AI 解析种子名/文件名再匹配 TMDB；当 AI 调用失败（如 API 额度上限/超时）或无结果时自动回退到常规 TMDB 识别
   ai_priority: false
-  # 【允许 AI 联网搜索】：开启后识别文件名时允许模型实时联网检索最新影视/动漫译名与年份（支持 Gemini Google Search、Claude、OpenAI；不支持或超额时自动无感降级）
+  # 【允许 AI 模型联网】：开启后优先调用模型自带实时联网能力（Gemini Google Search、Claude、OpenAI）；若同时开启 Tavily 则在模型不支持或联网配额受限时自动回退至 Tavily
   web_search: false
+  # 【启用 Tavily 搜索】：开启并填写 tavily_api_key 后，当未开启模型联网或模型原生联网受限时，自动通过 Tavily 搜索网页信息辅助 AI 识别
+  tavily_enable: false
+  # 【Tavily API Key】：在 https://tavily.com 免费获取（tvly-...）
+  tavily_api_key:
 
 # 【OCR】
 ocr:

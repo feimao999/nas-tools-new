@@ -1051,5 +1051,117 @@ class TestV40SlimmingAndCompatibility(unittest.TestCase):
             self.assertEqual([m["name"] for m in menus], ["我的媒体库", "订阅管理", "媒体整理"])
 
 
+class TestTavilyFallbackAndGeminiSafety(unittest.TestCase):
+    def setUp(self):
+        from app.helper.openai_helper import OpenAiHelper
+        self.helper = OpenAiHelper()
+        OpenAiHelper._tavily_cache.clear()
+        OpenAiHelper._native_search_cooldown_until.clear()
+
+    def test_build_tavily_query_preserves_sequel_numbers_and_strips_tags(self):
+        from app.helper.openai_helper import OpenAiHelper
+        q = OpenAiHelper._build_tavily_query(
+            "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip][HEVC-10bit][JPN][FLACx3].mkv"
+        )
+        self.assertEqual(q, "Detective Conan Movie 29 Fallen Angel of the Highway TMDB")
+
+        q_ep = OpenAiHelper._build_tavily_query("[LoliHouse] Sousou no Frieren - 05 [WebRip 1080p HEVC-10bit AAC].mkv")
+        self.assertEqual(q_ep, "Sousou no Frieren TMDB")
+
+    def test_gemini_safety_settings_and_native_fallback_to_tavily(self):
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-free-tier",
+            "model": "gemini-3.5-flash-lite",
+            "web_search": True,
+            "tavily_enable": True,
+            "tavily_api_key": "tvly-test-key",
+        }
+        self.helper.init_config()
+
+        calls = []
+
+        def fake_post(url, headers=None, json=None, **kwargs):
+            calls.append((url, headers, json))
+            if "tavily.com/search" in url:
+                return _make_response(200, {
+                    "answer": "Detective Conan Movie 29 (2026) is 名探偵コナン ハイウェイの堕天使 (名侦探柯南：高速公路的堕天使).",
+                    "results": [
+                        {
+                            "title": "名侦探柯南：高速公路的堕天使 - TMDB",
+                            "url": "https://www.themoviedb.org/movie/123456",
+                            "content": "2026年上映的名侦探柯南第29部剧场版，原名：名探偵コナン ハイウェイの堕天使。",
+                        }
+                    ],
+                })
+            # Gemini endpoint
+            if json and json.get("tools"):
+                # 模拟 Gemini 免费层原生 google_search 返回 429
+                return _make_response(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}})
+            # 离线纯文本 + Tavily 上下文调用：验证 safetySettings 为 BLOCK_NONE 且开启了严格 JSON
+            self.assertEqual(len(json.get("safetySettings", [])), 4)
+            for s in json["safetySettings"]:
+                self.assertEqual(s["threshold"], "BLOCK_NONE")
+            self.assertEqual(json["generationConfig"]["responseMimeType"], "application/json")
+            user_text = json["contents"][-1]["parts"][0]["text"]
+            self.assertIn("名侦探柯南：高速公路的堕天使", user_text)
+            return _make_response(200, {
+                "candidates": [{
+                    "content": {
+                        "parts": [{
+                            "text": '{"title":"名侦探柯南：高速公路的堕天使","original_title":"名探偵コナン ハイウェイの堕天使","en_title":"Detective Conan: Fallen Angel of the Highway","search_keywords":["高速公路的堕天使","Fallen Angel of the Highway"],"type":"movie","version":"","part":"","year":"2026","resolution":"2160p","season":null,"episode":null}'
+                        }]
+                    }
+                }]
+            })
+
+        with patch.object(requests, "post", side_effect=fake_post):
+            parsed = self.helper.get_media_name(
+                "[4K][DBD-Raws][Detective Conan Movie 29 Fallen Angel of the Highway][2160P][BDRip][HEVC-10bit][JPN][FLACx3].mkv"
+            )
+            self.assertEqual(parsed["title"], "名侦探柯南：高速公路的堕天使")
+            self.assertEqual(parsed["original_title"], "名探偵コナン ハイウェイの堕天使")
+            # 第 1 次识别：1 次 Gemini 原生联网（429）+ 1 次 Tavily + 1 次 Gemini 离线 = 3 次请求
+            self.assertEqual(len(calls), 3)
+
+            # 冷却期内第 2 次识别不同文件：自动跳过会撞 429 的 Gemini 原生联网，直接走 Tavily + Gemini 离线（仅新增 2 次请求）
+            calls.clear()
+            parsed2 = self.helper.get_media_name("[VCB-Studio] Another New Movie [1080p].mkv")
+            self.assertEqual(parsed2["title"], "名侦探柯南：高速公路的堕天使")
+            self.assertEqual(len(calls), 2)
+            self.assertIn("tavily.com/search", calls[0][0])
+
+    def test_native_succeeds_skips_tavily(self):
+        Config.openai_cfg = {
+            "provider": "gemini",
+            "api_key": "AIza-paid-tier",
+            "model": "gemini-2.5-flash",
+            "web_search": True,
+            "tavily_enable": True,
+            "tavily_api_key": "tvly-test-key",
+        }
+        self.helper.init_config()
+        calls = []
+
+        def fake_post(url, headers=None, json=None, **kwargs):
+            calls.append(url)
+            return _make_response(200, {
+                "candidates": [{
+                    "content": {
+                        "parts": [{
+                            "text": '{"title":"测试电影","original_title":"","en_title":"Test Movie","search_keywords":["Test Movie"],"type":"movie","version":"","part":"","year":"2026","resolution":"1080p","season":null,"episode":null}'
+                        }]
+                    }
+                }]
+            })
+
+        with patch.object(requests, "post", side_effect=fake_post):
+            parsed = self.helper.get_media_name("Test.Movie.2026.1080p.mkv")
+            self.assertEqual(parsed["title"], "测试电影")
+            # 原生联网成功时，绝不消耗 Tavily 额度
+            self.assertEqual(len(calls), 1)
+            self.assertNotIn("tavily.com", calls[0])
+
+
 if __name__ == "__main__":
     unittest.main()

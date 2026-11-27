@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import re
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -26,8 +27,22 @@ class OpenAiHelper:
     _api_url = ""
     _model = ""
     _web_search = False
+    _tavily_enable = False
+    _tavily_api_key = ""
     _proxies = None
     _timeout = 60
+
+    _TAVILY_ENDPOINT = "https://api.tavily.com/search"
+    _NATIVE_SEARCH_COOLDOWN_SECONDS = 600
+    _tavily_cache = {}
+    _native_search_cooldown_until = {}
+
+    _GEMINI_SAFETY_SETTINGS = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
 
     _PROVIDERS = ("openai", "claude", "gemini", "local")
 
@@ -71,6 +86,8 @@ class OpenAiHelper:
         default_model = self._DEFAULT_MODELS.get(self._provider, "gpt-4o-mini")
         self._model = (cfg.get("model") or "").strip() or default_model
         self._web_search = bool(cfg.get("web_search"))
+        self._tavily_enable = bool(cfg.get("tavily_enable"))
+        self._tavily_api_key = (cfg.get("tavily_api_key") or "").strip()
         self._proxies = Config().get_proxies()
 
     def get_state(self):
@@ -430,7 +447,10 @@ class OpenAiHelper:
             else:
                 contents.append({"role": "user", "parts": [{"text": text}]})
 
-        payload = {"contents": contents}
+        payload = {
+            "contents": contents,
+            "safetySettings": self._GEMINI_SAFETY_SETTINGS,
+        }
         if system_parts:
             payload["system_instruction"] = {"parts": system_parts}
 
@@ -558,6 +578,119 @@ class OpenAiHelper:
             filtered.append(model_id)
         return sorted(set(filtered))
 
+    @classmethod
+    def _build_tavily_query(cls, raw_input):
+        """
+        将复杂媒体文件名/种子名清洗为适合 Tavily 检索的精简关键词
+        """
+        lines = [ln.strip() for ln in str(raw_input or "").splitlines() if ln.strip()]
+        if not lines:
+            return ""
+        primary = lines[0]
+        # 去除常见视频后缀
+        primary = re.sub(r"\.(mkv|mp4|avi|ts|m2ts|iso|rmvb|flv|webm|mov|wmv)$", "", primary, flags=re.IGNORECASE)
+        # 去除 8 位 CRC32 校验码，如 [A1B2C3D4]
+        primary = re.sub(r"\[[0-9A-Fa-f]{8}\]", " ", primary)
+        # 将括号与常见分隔符替换为空格（保留括号内的片名本身，如 [Detective Conan Movie 29 ...]）
+        primary = re.sub(r"[\[\]()【】（）_]+", " ", primary)
+        primary = re.sub(r"(?<=\w)\.(?=\w)", " ", primary)
+        # 剥离压制组、分辨率、编码、音轨、语言标签与纯单集号
+        noise_pattern = (
+            r"\b(?:"
+            r"4K|8K|2160p|1080p|1080i|720p|576p|480p|UHD|FHD|"
+            r"BDRip|BDMV|BluRay|Blu-ray|WEB-DL|WEBRip|HDTV|DVDRip|REMUX|BDRemux|"
+            r"HEVC|AVC|H\.?265|H\.?264|x265|x264|AV1|10bit|8bit|Hi10P|"
+            r"HDR10\+?|HDR|DoVi|DV|SDR|"
+            r"FLAC(?:x\d+)?|AAC(?:x\d+)?|AC3|EAC3|DDP[\d.]*|DTS(?:-HD)?|TrueHD|Atmos|LPCM|MP3|"
+            r"JPN|JAP|CHS|CHT|JPSC|JPTC|BIG5|GB|ENG|CHI|KOR|60fps|24fps|"
+            r"DBD-Raws|VCB-Studio|LoliHouse|Lilith-Raws|Sakurato|ANi|Baha|B-Global|Nekomoe\s+kissaten|"
+            r"S\d{1,2}E\d{1,3}|EP?\d{1,3}|v\d"
+            r")\b"
+        )
+        cleaned = re.sub(noise_pattern, " ", primary, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" -._/")
+        # 仅剥离末尾形如 "- 05" 或前导零集号 " 05"，保留 Movie 29 / Part 2 / 300 等片名数字
+        cleaned = re.sub(r"(?:\s*-\s*\d{1,3}|\s+0\d{1,2})$", "", cleaned).strip(" -._/")
+        if not cleaned:
+            cleaned = lines[0][:100].strip()
+        # 若附带了副标题描述行，补充前 40 字符辅助定位中文译名
+        if len(lines) > 1:
+            sub = re.sub(r"^(?:Subtitle|Torrent description|副标题)[:：\s]*", "", lines[1], flags=re.IGNORECASE).strip()
+            if sub and sub not in cleaned:
+                cleaned = f"{cleaned} {sub[:40]}".strip()
+        cleaned = cleaned[:120].strip()
+        if "tmdb" not in cleaned.lower():
+            cleaned = f"{cleaned} TMDB"
+        return cleaned
+
+    def _search_tavily(self, raw_input):
+        """
+        调用 Tavily Search API 获取网页标题与摘要（带内存缓存，每次 basic 检索仅消耗 1 credit）
+        """
+        query = self._build_tavily_query(raw_input)
+        if not query or not self._tavily_api_key:
+            return ""
+        cached = self._tavily_cache.get(query)
+        if cached is not None:
+            return cached
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self._tavily_api_key}",
+        }
+        payload = {
+            "query": query,
+            "search_depth": "basic",
+            "max_results": 5,
+            "include_answer": True,
+        }
+        resp = requests.post(
+            self._TAVILY_ENDPOINT,
+            headers=headers,
+            json=payload,
+            proxies=self._get_request_proxies(self._TAVILY_ENDPOINT, provider="tavily"),
+            timeout=15,
+        )
+        self._raise_for_http_error(resp)
+        data = resp.json() if resp.content else {}
+        lines = []
+        answer = (data.get("answer") or "").strip()
+        if answer:
+            lines.append(f"Summary: {answer[:400]}")
+        for idx, item in enumerate(data.get("results") or [], start=1):
+            if not isinstance(item, dict):
+                continue
+            title = (item.get("title") or "").strip()
+            content = re.sub(r"\s+", " ", (item.get("content") or "").strip())[:280]
+            url = (item.get("url") or "").strip()
+            if title or content:
+                lines.append(f"[{idx}] {title} ({url}): {content}")
+        formatted = "\n".join(lines).strip()
+        if len(self._tavily_cache) >= 256:
+            self._tavily_cache.pop(next(iter(self._tavily_cache)), None)
+        self._tavily_cache[query] = formatted
+        return formatted
+
+    @staticmethod
+    def _inject_search_context(messages, search_context):
+        """
+        将外部搜索摘要注入到最后一条 user 消息中，供离线/免费模型直接使用
+        """
+        if not search_context:
+            return messages
+        enriched = [dict(m) for m in messages]
+        suffix = (
+            "\n\nWeb search reference results (use these real facts to determine the official Chinese title, "
+            "original-language title, TMDB season number, and release year):\n"
+            f"{search_context}"
+        )
+        for i in range(len(enriched) - 1, -1, -1):
+            if (enriched[i].get("role") or "user").lower() == "user":
+                enriched[i]["content"] = f"{enriched[i].get('content') or ''}{suffix}"
+                return enriched
+        enriched.append({"role": "user", "content": suffix.strip()})
+        return enriched
+
     def _dispatch_model(self, messages, user="NAStool", json_mode=False, use_web_search=False, **kwargs):
         if self._provider == "claude":
             return self._call_claude(messages, json_mode=json_mode, use_web_search=use_web_search, **kwargs)
@@ -567,27 +700,71 @@ class OpenAiHelper:
             messages, user=user, json_mode=json_mode, use_web_search=use_web_search, **kwargs
         )
 
-    def __get_model(self, message, prompt=None, user="NAStool", json_mode=False, use_web_search=False, **kwargs):
+    def __get_model(
+        self,
+        message,
+        prompt=None,
+        user="NAStool",
+        json_mode=False,
+        use_web_search=False,
+        use_tavily=False,
+        search_query_source=None,
+        **kwargs,
+    ):
         """
-        按当前配置的服务商调用对应 AI 模型并返回文本内容；若开启联网但模型不支持或联网额度用尽，自动降级离线重试
+        按优先级调用 AI 模型：
+        1. 若开启模型原生联网且非本地模型：优先尝试模型原生联网；
+        2. 若模型不支持联网、模型原生联网配额耗尽/报错，或仅开启了 Tavily：自动回退使用 Tavily 搜索网页摘要注入提示词；
+        3. 若 Tavily 亦未启用或失败：自动降级为纯离线模型识别。
         """
         messages = self._normalize_messages(message, prompt=prompt)
-        enable_search = bool(use_web_search and self._provider != "local")
-        if enable_search:
+        native_available = bool(use_web_search and self._provider != "local")
+        tavily_available = bool(use_tavily and self._tavily_api_key)
+        cooldown_key = (self._provider, self._model, (self._api_key or "")[:12])
+        native_cooled = tavily_available and (
+            time.time() < self._native_search_cooldown_until.get(cooldown_key, 0)
+        )
+
+        # 1. 模型原生联网优先
+        if native_available and not native_cooled:
             try:
                 return self._dispatch_model(
                     messages, user=user, json_mode=json_mode, use_web_search=True, **kwargs
                 )
-            except (_AIRateLimitError, requests.exceptions.HTTPError) as e:
-                msg = f"【AI】联网搜索不可用或达到联网配额上限，自动降级为离线识别重试：{str(e)}"
+            except (_AIRateLimitError, requests.exceptions.HTTPError, requests.exceptions.RequestException) as e:
+                if tavily_available:
+                    self._native_search_cooldown_until[cooldown_key] = (
+                        time.time() + self._NATIVE_SEARCH_COOLDOWN_SECONDS
+                    )
+                    msg = f"【AI】模型原生联网不可用或配额受限，自动回退至 Tavily 搜索：{str(e)}"
+                else:
+                    msg = f"【AI】联网搜索不可用或达到联网配额上限，自动降级为离线识别重试：{str(e)}"
                 log.warn(msg) if log else print(msg)
+
+        # 2. 回退或直接使用 Tavily 外部搜索增强
+        if tavily_available:
+            query_source = search_query_source if search_query_source is not None else (
+                message if isinstance(message, str) else ""
+            )
+            try:
+                tavily_context = self._search_tavily(query_source)
+                if tavily_context:
+                    enriched_messages = self._inject_search_context(messages, tavily_context)
+                    return self._dispatch_model(
+                        enriched_messages, user=user, json_mode=json_mode, use_web_search=False, **kwargs
+                    )
+            except Exception as e:
+                msg = f"【AI】Tavily 搜索不可用或额度耗尽，自动降级为离线识别：{str(e)}"
+                log.warn(msg) if log else print(msg)
+
+        # 3. 纯离线模型调用
         return self._dispatch_model(
             messages, user=user, json_mode=json_mode, use_web_search=False, **kwargs
         )
 
     def get_media_name(self, filename):
         """
-        第一阶段：从文件名或种子名中提取媒体名称、原名、多路 TMDB 搜索词与季集要素（支持可选联网检索）
+        第一阶段：从文件名或种子名中提取媒体名称、原名、多路 TMDB 搜索词与季集要素（支持模型联网优先 + Tavily 回退）
         :param filename: 文件名或种子名（可附带副标题）
         :return: Json dict | None
         """
@@ -595,10 +772,14 @@ class OpenAiHelper:
             return None
         result = ""
         try:
+            any_search_enabled = bool(
+                (self._web_search and self._provider != "local")
+                or (self._tavily_enable and self._tavily_api_key)
+            )
             search_hint = (
                 "If the release is a recent/unfamiliar movie, anime theatrical film (e.g. 'Movie 29'), or non-Chinese title, "
-                "use web search to find its official Chinese title, original-language title (e.g. Japanese), and release year on TMDB/Wikipedia.\n"
-                if self._web_search and self._provider != "local"
+                "use web search or any provided web search reference results to find its official Chinese title, original-language title (e.g. Japanese), and release year on TMDB/Wikipedia.\n"
+                if any_search_enabled
                 else ""
             )
             _filename_prompt = (
@@ -621,6 +802,8 @@ class OpenAiHelper:
                 message=filename,
                 json_mode=True,
                 use_web_search=self._web_search,
+                use_tavily=self._tavily_enable,
+                search_query_source=filename,
             )
             return self._extract_json(result)
         except _AIRateLimitError as e:

@@ -523,8 +523,19 @@
                 </div>
               </div>
             </div>
+            <div class="row">
+              <div class="col-12">
+                <div class="mb-3">
+                  <label class="form-label">Tavily API Key <span class="form-help"
+                                                                  title="可选：在 https://tavily.com 免费获取（免绑卡每月 1,000 次额度）。配合下方「启用 Tavily 搜索」使用：若同时开启「允许 AI 模型联网」，则优先使用模型自带联网，当模型不支持或联网配额受限时自动回退至 Tavily 搜索辅助识别"
+                                                                  data-bs-toggle="tooltip">?</span></label>
+                  <input type="text" value="{% if Config.openai %}{{ Config.openai.tavily_api_key or '' }}{% endif %}" class="form-control"
+                         id="openai.tavily_api_key" placeholder="tvly-...（可选，用于模型不支持联网或免费配额受限时自动回退搜索）" autocomplete="off">
+                </div>
+              </div>
+            </div>
             <div class="row mt-1">
-              <div class="col-12 col-md-4">
+              <div class="col-12 col-md-6 col-xl-3">
                 <div class="mb-3">
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="laboratory.chatgpt_enable" {% if
@@ -536,7 +547,7 @@
                   </label>
                 </div>
               </div>
-              <div class="col-12 col-md-4">
+              <div class="col-12 col-md-6 col-xl-3">
                 <div class="mb-3">
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="openai.ai_priority" {% if
@@ -548,13 +559,25 @@
                   </label>
                 </div>
               </div>
-              <div class="col-12 col-md-4">
+              <div class="col-12 col-md-6 col-xl-3">
                 <div class="mb-3">
                   <label class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="openai.web_search" {% if
                       Config.openai and Config.openai.web_search %}checked{% endif %}>
-                    <span class="form-check-label">允许 AI 联网搜索 <span class="form-help"
-                                                                          title="开启后识别复杂名称或新番/剧场版时允许模型实时联网检索官方中文译名、原语言名与上映年份（支持 Gemini Google Search、Claude、OpenAI；若模型不支持或联网额度用尽，将自动无感降级为离线模式）"
+                    <span class="form-check-label">允许 AI 模型联网 <span class="form-help"
+                                                                          title="开启后优先调用模型自带的联网能力（Gemini Google Search、Claude、OpenAI）；若模型不支持或联网配额用尽，已开启 Tavily 时会自动回退到 Tavily 搜索，否则降级为离线识别"
+                                                                          data-bs-toggle="tooltip">?</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div class="col-12 col-md-6 col-xl-3">
+                <div class="mb-3">
+                  <label class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="openai.tavily_enable" {% if
+                      Config.openai and Config.openai.tavily_enable %}checked{% endif %}>
+                    <span class="form-check-label">启用 Tavily 搜索 <span class="form-help"
+                                                                          title="开启并填写上方 Tavily API Key 后：若未开启模型联网，或模型自带联网不可用/配额耗尽（如 Gemini 免费层），将自动调用 Tavily 搜索网页摘要喂给 AI 识别"
                                                                           data-bs-toggle="tooltip">?</span>
                     </span>
                   </label>
@@ -1424,10 +1447,16 @@
       $("#laboratory\\.chatgpt_enable").prop("checked", true);
     }
   });
+  $("#openai\\.tavily_enable").on("change", function () {
+    if ($(this).prop("checked")) {
+      $("#laboratory\\.chatgpt_enable").prop("checked", true);
+    }
+  });
   $("#laboratory\\.chatgpt_enable").on("change", function () {
     if (!$(this).prop("checked")) {
       $("#openai\\.ai_priority").prop("checked", false);
       $("#openai\\.web_search").prop("checked", false);
+      $("#openai\\.tavily_enable").prop("checked", false);
     }
   });
 
